@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Player } from '@voxel/shared';
+import { AvatarNameplate } from './avatar-nameplate';
 
 const outfits = [
   { coat: 0x426e68, trim: 0xe6b86d, hair: 0x493b32 },
@@ -9,6 +10,7 @@ const outfits = [
 
 /** Feet are at y=0 and the face points down -Z, matching world movement. */
 export class VoxelAvatar extends THREE.Group {
+  readonly nameplate = new AvatarNameplate();
   private geometry = new THREE.BoxGeometry(1, 1, 1);
   private materials = new Map<number, THREE.MeshStandardMaterial>();
   private torso = new THREE.Group();
@@ -30,7 +32,7 @@ export class VoxelAvatar extends THREE.Group {
     const skin = agent ? 0xe8e3cc : 0xd8aa85;
     const dark = 0x334a47;
     this.name = agent ? 'Agent companion' : 'Explorer';
-    this.add(this.torso, this.leftLeg, this.rightLeg);
+    this.add(this.torso, this.leftLeg, this.rightLeg, this.nameplate);
 
     // A compact silhouette with separate boots, trousers, and shoulder joints.
     for (const [side, leg] of [
@@ -180,6 +182,7 @@ export class VoxelAvatar extends THREE.Group {
   }
 
   dispose() {
+    this.nameplate.dispose();
     this.geometry.dispose();
     for (const material of this.materials.values()) material.dispose();
     this.materials.clear();

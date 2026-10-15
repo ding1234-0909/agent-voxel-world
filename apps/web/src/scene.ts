@@ -205,6 +205,10 @@ export class WorldScene {
       );
       avatar.rotation.y = p.yaw;
       avatar.visible = p.connected;
+      avatar.nameplate.update(
+        p,
+        this.camera.position.distanceTo(avatar.position),
+      );
     }
     this.ray.setFromCamera(new THREE.Vector2(0, 0), this.camera);
     this.ray.far = REACH;
