@@ -28,6 +28,21 @@ const event = (actor: string, scope: string, recipients: string[] = []) => ({
 });
 afterEach(() => vi.restoreAllMocks());
 describe('private chat', () => {
+  it('resolves exact typed public mentions and avoids ambiguous names and name prefixes', () => {
+    const people = [
+      player('sender'),
+      { ...player('ai'), name: 'AI 探索者' },
+      { ...player('a'), name: '同名' },
+      { ...player('b'), name: '同名' },
+    ];
+    const emit = vi.fn(),
+      chat = new WorldChat(() => people, emit);
+    chat.send('sender', { text: '@AI 探索者 换个地方？ @同名 hi' });
+    expect(emit.mock.calls[0][1].recipients).toEqual(['ai']);
+    const second = new WorldChat(() => people, emit);
+    second.send('sender', { text: '@AI 探索者2 hi' });
+    expect(emit.mock.calls[1][1].recipients).toEqual([]);
+  });
   it('rejects empty, duplicate and malformed private recipients', () => {
     expect(parseChatRoute({ text: 'hi' })).toEqual({
       scope: 'public',

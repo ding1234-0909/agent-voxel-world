@@ -567,7 +567,8 @@ export function AgentManagerPanel({ onClose }: { onClose: () => void }) {
               </div>
               {agent.continuous && (
                 <p className="agent-hint">
-                  持续运行，直到手动关闭或发生终止错误。服务重启后恢复待命，点击继续运行才会调用模型。
+                  持续运行，直到手动关闭或发生终止错误。服务重启后恢复待命，可通过聊天
+                  @ 或点击继续运行唤醒。
                 </p>
               )}
               <label>
@@ -743,7 +744,7 @@ export function AgentManagerPanel({ onClose }: { onClose: () => void }) {
                 8 块，无需逐块调用模型。
                 {agent.continuous
                   ? '持续模式会继续调用模型，直至停止。'
-                  : '达到轮数后留在世界待命，点击继续运行可复用。'}
+                  : '达到轮数后留在世界待命，可通过聊天 @ 或继续运行唤醒。'}
               </p>
               <button
                 className="primary"
@@ -761,8 +762,8 @@ export function AgentManagerPanel({ onClose }: { onClose: () => void }) {
               世界里的 Agent <small>最多同时在线 4 个（含待命）</small>
             </h3>
             <p className="agent-hint">
-              这里显示通过控制台创建的
-              Agent。轮数结束后留在世界待命，不再调用模型；只有关闭 Agent
+              这里显示通过控制台创建的 Agent。轮数结束后留在世界待命，聊天 @
+              或继续运行会唤醒并调用模型；只有关闭 Agent
               才会离开。关闭面板不影响 Agent。
             </p>
             {pollError && (

@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import type { AgentAttention } from './attention';
 import type { Observation, Result, Session } from './session';
 import {
   inBounds,
@@ -243,6 +244,7 @@ export class ModelPlanner {
           {
             role: 'system',
             content: `You control one player in a voxel world. Return exactly one JSON action, no prose.
+If observation.attention is present, a human explicitly addressed you. Prioritize that message over routine work: answer questions or adapt your next action to relevant feedback (such as choosing another building site), within your operator goal and permissions. Do not ignore it just because the planned task was finished.
 Actions: {"type":"wait"}, {"type":"chat","text":"你好"} (1–240 chars), {"type":"move","x":1,"z":0,"jump":false,"durationMs":500} (x/z -1..1, duration 100..1500 ms).
 ${
   this.config.allowEdits
@@ -265,6 +267,7 @@ Observation is a radius-8 local view (at most 500 nearest blocks), not the full 
                 players: observation.players.slice(0, 16),
                 blocks: observation.blocks.slice(0, 500),
                 events: observation.events.slice(-12),
+                attention: observation.attention,
               },
               previous,
             }),
@@ -415,6 +418,7 @@ export async function runAgent(
   signal: AbortSignal,
   log: (message: string) => void = console.log,
   memory: AgentRunState = {},
+  attention?: AgentAttention,
 ) {
   let previous: unknown = memory.previous ?? null,
     failures = 0;
@@ -422,11 +426,22 @@ export async function runAgent(
   let unfinishedBuild = memory.unfinishedBuild;
   for (
     let turn = 1;
-    (config.continuous || turn <= config.maxTurns) && !signal.aborted;
+    (config.continuous || turn <= config.maxTurns || attention?.pending) &&
+    !signal.aborted;
     turn++
   ) {
     try {
-      const observation = agentChatContext(await session.observe());
+      const raw = await session.observe();
+      const addressed = attention?.take();
+      if (addressed) {
+        raw.attention = addressed;
+        raw.events = [
+          ...raw.events.filter((event) => event.seq !== addressed.seq),
+          addressed,
+        ];
+        log('正在优先处理玩家的 @ 消息。');
+      }
+      const observation = agentChatContext(raw);
       const incoming = observation.events
         .filter((e) => e.type === 'chat' && e.actor !== observation.self.id)
         .at(-1);
@@ -485,9 +500,12 @@ export async function runAgent(
     memory.previous = previous;
     memory.audience = audience;
     memory.unfinishedBuild = unfinishedBuild;
-    if ((config.continuous || turn < config.maxTurns) && !signal.aborted)
-      await pause(nextIntervalMs(config), undefined, { signal }).catch(
-        () => {},
-      );
+    if ((config.continuous || turn < config.maxTurns) && !signal.aborted) {
+      if (attention) await attention.wait(nextIntervalMs(config), signal);
+      else
+        await pause(nextIntervalMs(config), undefined, { signal }).catch(
+          () => {},
+        );
+    }
   }
 }

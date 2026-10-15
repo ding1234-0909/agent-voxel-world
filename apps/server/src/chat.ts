@@ -71,6 +71,27 @@ export class WorldChat {
       text = (value as { text?: unknown }).text;
     if (typeof text !== 'string' || !text.trim() || text.length > 240)
       throw new ChatError('消息需为 1–240 字。');
+    // Resolve typed public mentions too. Duplicate nicknames require the picker.
+    if (route.scope === 'public') {
+      const players = [...this.players()].filter(
+        (p) => p.connected && p.id !== actor,
+      );
+      for (const player of players) {
+        if (players.filter((p) => p.name === player.name).length !== 1)
+          continue;
+        const escaped = player.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        if (
+          new RegExp(
+            `(?:^|\\s)@${escaped}(?=$|\\s|[，。！？、,:;!?])`,
+            'u',
+          ).test(text) &&
+          !route.recipients.includes(player.id)
+        )
+          route.recipients.push(player.id);
+      }
+      if (route.recipients.length > 8)
+        throw new ChatError('接收对象最多选择 8 位。');
+    }
     if (Date.now() - (this.sent.get(actor) ?? 0) < 300)
       throw new ChatError('发送过快，请稍候。', 429);
     this.sent.set(actor, Date.now());

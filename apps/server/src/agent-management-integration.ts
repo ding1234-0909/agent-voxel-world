@@ -9,7 +9,7 @@ import { WebSocketTransport } from '@colyseus/ws-transport';
 import { WorldRoom } from './room';
 import { AgentManager, ProviderStore } from './agent-manager';
 import { installAgentRoutes } from './agent-routes';
-import { Session, until } from '../../agent/src/session';
+import { Session, until, type Observation } from '../../agent/src/session';
 import { ModelPlanner } from '../../agent/src/deepseek';
 import type { ManagedAgentView } from '@voxel/shared';
 process.env.DATABASE_URL = '';
@@ -26,6 +26,8 @@ const server = new Server({
 server.define('world', WorldRoom);
 let manager: AgentManager | undefined;
 let calls = 0;
+const observations: Observation[] = [];
+let speaker: Session | undefined;
 try {
   await server.listen(0, '127.0.0.1');
   const listing = await matchMaker.createRoom('world', {});
@@ -55,7 +57,15 @@ try {
   };
   manager = new AgentManager(store, url.replace('http', 'ws'), {
     session: (url) => new Session(url),
-    planner: (config, provider) => new ModelPlanner(config, request, provider),
+    planner: (config, provider) => {
+      const planner = new ModelPlanner(config, request, provider);
+      const decide = planner.decide.bind(planner);
+      planner.decide = (...args) => {
+        observations.push(args[0]);
+        return decide(...args);
+      };
+      return planner;
+    },
     models: async () => ['fixture-model'],
   });
   installAgentRoutes(app, manager);
@@ -165,6 +175,46 @@ try {
     const callsWhenIdle: number = calls;
     await new Promise((resolve) => setTimeout(resolve, 100));
     assert.equal(calls, callsWhenIdle, 'idle does not invoke the model');
+    speaker = new Session(url.replace('http', 'ws'));
+    await speaker.join('Human caller', 'human');
+    await speaker.request('chat', {
+      text: '@Managed AI change site',
+      scope: 'public',
+    });
+    await until(
+      () =>
+        calls === callsWhenIdle + 1 &&
+        manager!.list().find((j) => j.id === job.id)?.status === 'idle',
+    );
+    assert.equal(observations.at(-1)?.attention?.actor, speaker.room.sessionId);
+    assert.equal(
+      manager.list().find((j) => j.id === job.id)?.sessionId,
+      idle.sessionId,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    await speaker.request('chat', {
+      text: 'Private instruction',
+      scope: 'private',
+      recipients: [idle.sessionId],
+    });
+    await until(
+      () =>
+        calls === callsWhenIdle + 2 &&
+        manager!.list().find((j) => j.id === job.id)?.status === 'idle',
+    );
+    assert.equal(
+      (observations.at(-1)?.attention?.data as { scope: string }).scope,
+      'private',
+    );
+    await until(() =>
+      speaker!.events.some(
+        (e) =>
+          e.actor === idle.sessionId &&
+          (e.data as { scope?: string }).scope === 'private',
+      ),
+    );
+    await speaker.close();
+    speaker = undefined;
     assert.equal((await api(`/${job.id}/stop`, 'POST', {})).status, 200);
     await until(
       () => manager!.list().find((j) => j.id === job.id)?.status === 'stopped',
@@ -175,7 +225,7 @@ try {
       'closing retains reusable config',
     );
   }
-  assert.equal(calls, 4);
+  assert.equal(calls, 8);
   const created = [] as string[];
   for (let i = 0; i < 4; i++) {
     const res = await api('', 'POST', {
@@ -201,6 +251,23 @@ try {
     ),
   );
   assert([...room.state.players.values()].every((p) => p.kind === 'ai-agent'));
+  speaker = new Session(url.replace('http', 'ws'));
+  await speaker.join('Human caller', 'human');
+  const sleeping = manager.list().find((j) => j.id === created[0])!;
+  const beforeWake = calls;
+  await speaker.request('chat', {
+    text: 'Wake now',
+    scope: 'public',
+    recipients: [sleeping.sessionId],
+  });
+  await until(() => calls === beforeWake + 1, 3000);
+  assert.equal(
+    observations.at(-1)?.self.id,
+    sleeping.sessionId,
+    'only the addressed agent skips its 60s interval',
+  );
+  await speaker.close();
+  speaker = undefined;
   assert.equal(
     (
       await api('', 'POST', {
@@ -268,6 +335,7 @@ try {
     'PASS: origin guard, credential redaction, round completion stays online, reuse preserves player identity/position, task replacement, idle spends no inference, close/rejoin, online capacity and restart restoration without inference. Model responses are fixtures.',
   );
 } finally {
+  await speaker?.close();
   await manager?.close();
   await server.gracefullyShutdown(false);
   await rm(dir, { recursive: true, force: true });

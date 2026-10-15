@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { AgentManager, ProviderStore } from '../apps/server/src/agent-manager';
 import { DeepSeekError, type ModelPlanner } from '../apps/agent/src/deepseek';
 import type { Session, Observation } from '../apps/agent/src/session';
+import type { WorldEvent } from '../packages/shared/src/index';
 let dir: string, store: ProviderStore, manager: AgentManager | undefined;
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'agent-life-'));
@@ -20,6 +21,7 @@ function fakeSession(wait = Promise.resolve()) {
   let open = false;
   const leaves: (() => void)[] = [];
   const session = {
+    onEvent: undefined as ((event: WorldEvent) => void) | undefined,
     room: {
       sessionId: 'player-1',
       onLeave: (cb: () => void) => leaves.push(cb),
@@ -104,4 +106,49 @@ it('unexpected disconnect releases identity and allows rejoining the same saved 
     sessionId: 'player-1',
   });
   expect(s.join).toHaveBeenCalledTimes(2);
+});
+
+it('human mentions wake an idle agent once and queue during inference without concurrent calls', async () => {
+  const s = fakeSession();
+  let release!: () => void;
+  const decide = vi.fn(async () => ({ type: 'wait' as const }));
+  const m = setup(s, decide),
+    job = m.create(settings);
+  await vi.waitFor(() => expect(m.list()[0].status).toBe('idle'));
+  const mention = (seq: number, actorKind = 'human'): WorldEvent => ({
+    seq,
+    actorKind,
+    actor: 'person',
+    type: 'chat',
+    at: Date.now(),
+    data: {
+      scope: 'public',
+      recipients: ['player-1'],
+      text: '换个地方',
+      kind: 'text',
+      name: 'Person',
+    },
+  });
+  s.onEvent!(mention(1, 'ai-agent'));
+  expect(decide).toHaveBeenCalledTimes(1);
+  decide.mockImplementationOnce(async () => {
+    await new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return { type: 'wait' };
+  });
+  s.onEvent!(mention(2));
+  await vi.waitFor(() => expect(decide).toHaveBeenCalledTimes(2));
+  s.onEvent!(mention(2));
+  s.onEvent!(mention(3));
+  expect(decide).toHaveBeenCalledTimes(2);
+  release();
+  await vi.waitFor(() => expect(m.list()[0].status).toBe('idle'));
+  expect(decide).toHaveBeenCalledTimes(3);
+  expect(s.join).toHaveBeenCalledTimes(1);
+  expect(s.close).not.toHaveBeenCalled();
+  m.stop(job.id);
+  await vi.waitFor(() => expect(m.list()[0].status).toBe('stopped'));
+  s.onEvent!(mention(4));
+  expect(decide).toHaveBeenCalledTimes(3);
 });

@@ -39,6 +39,7 @@ export type Snapshot = {
   persistence: string;
 };
 export type WorldEvent = {
+  actorKind?: string;
   seq: number;
   type: string;
   actor: string;

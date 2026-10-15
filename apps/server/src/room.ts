@@ -421,6 +421,7 @@ export class WorldRoom extends Room<WorldState> {
   }
   private chatEvent(actor: string, data: ChatData) {
     const event = {
+      actorKind: this.state.players.get(actor)?.kind,
       seq: ++this.seq,
       type: 'chat',
       actor,

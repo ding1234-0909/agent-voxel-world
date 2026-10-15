@@ -9,6 +9,7 @@ export type Observation = {
   events: WorldEvent[];
   radius: number;
   allowedActions: string[];
+  attention?: WorldEvent;
 };
 export type Result = {
   id: string;
@@ -37,6 +38,7 @@ export class Session {
   snapshot?: Snapshot;
   edits: Edit[] = [];
   events: WorldEvent[] = [];
+  onEvent?: (event: WorldEvent) => void;
   voice: unknown[] = [];
   chatToken = '';
   spatialSignals: unknown[] = [];
@@ -75,6 +77,7 @@ export class Session {
     room.onMessage('event', (e: WorldEvent) => {
       this.events.push(e);
       if (this.events.length > 100) this.events.shift();
+      this.onEvent?.(e);
     });
     room.onMessage('voice', (value) => {
       this.voice.push(value);

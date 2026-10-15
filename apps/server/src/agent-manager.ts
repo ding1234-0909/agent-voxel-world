@@ -8,6 +8,7 @@ import type {
   ProviderView,
 } from '@voxel/shared';
 import { Session } from '../../agent/src/session';
+import { AgentAttention } from '../../agent/src/attention';
 import {
   ModelPlanner,
   DeepSeekError,
@@ -295,6 +296,7 @@ type Job = {
   session?: Session;
   done?: Promise<void>;
   memory: AgentRunState;
+  attention: AgentAttention;
 };
 const active = (status: ManagedAgentView['status']) =>
   ['joining', 'running', 'stopping'].includes(status);
@@ -353,6 +355,7 @@ export class AgentManager {
         },
         abort: new AbortController(),
         memory: {},
+        attention: new AgentAttention(),
       };
       this.jobs.set(view.id, job);
       if (
@@ -433,6 +436,7 @@ export class AgentManager {
       },
       abort: new AbortController(),
       memory: {},
+      attention: new AgentAttention(),
     };
     this.jobs.set(job.view.id, job);
     job.done = this.execute(job, provider);
@@ -477,9 +481,28 @@ export class AgentManager {
       const config: AgentConfig = { ...job.view, apiKey: provider.apiKey };
       if (!job.session) {
         const session = this.dependencies.session(this.serverUrl);
+        job.attention = new AgentAttention();
         job.session = session;
         await session.join(job.view.name, 'ai-agent');
         job.view.sessionId = session.room.sessionId;
+        session.onEvent = (event) => {
+          if (
+            this.closing ||
+            job.session !== session ||
+            !['running', 'idle'].includes(job.view.status)
+          )
+            return;
+          if (!job.attention.push(event, session.room.sessionId)) return;
+          if (job.view.status === 'idle') {
+            log('收到玩家 @，已唤醒并继续任务。');
+            try {
+              this.resume(job.view.id);
+            } catch {
+              job.attention.clear();
+              log('唤醒失败，请检查配置后手动继续。');
+            }
+          }
+        };
         session.room.onLeave(() => {
           if (job.session !== session) return;
           job.session = undefined;
@@ -503,14 +526,15 @@ export class AgentManager {
           job.abort.signal,
           log,
           job.memory,
+          job.attention,
         );
       }
       finalStatus = job.abort.signal.aborted ? 'failed' : 'idle';
       if (finalStatus === 'idle')
         log(
           run
-            ? '本轮任务结束，留在世界待命；继续运行前不会调用模型。'
-            : '服务恢复，已回到世界待命；请手动继续运行。',
+            ? '本轮任务结束，留在世界待命；可通过 @ 或继续运行唤醒。'
+            : '服务恢复，已回到世界待命；可通过 @ 或继续运行唤醒。',
         );
     } catch (error) {
       finalStatus = 'failed';
@@ -539,6 +563,7 @@ export class AgentManager {
       (resident(job) || job.view.status !== 'stopped')
     ) {
       job.view.status = 'stopping';
+      job.attention.clear();
       job.abort.abort();
       const closed = job.session
         ?.close()
