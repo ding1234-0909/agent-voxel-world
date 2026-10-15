@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { type Material } from '@voxel/shared';
 import { Connection } from './connection';
 import { WorldScene } from './scene';
+import { VoicePanel } from './VoicePanel';
 import './style.css';
 const connection = new Connection();
 if (import.meta.hot) import.meta.hot.dispose(() => connection.dispose());
@@ -11,11 +12,6 @@ function App() {
   const host = useRef<HTMLDivElement>(null),
     scene = useRef<WorldScene | null>(null);
   const [, render] = useState(0);
-  const [voiceText, setVoiceText] = useState('Hello, meadow'),
-    [voice, setVoice] = useState({
-      state: 'idle',
-      subtitle: 'Text simulation only. No microphone, audio or AI.',
-    });
   const [name, setName] = useState(savedName ?? 'Explorer'),
     [joined, setJoined] = useState(!!savedName),
     [chat, setChat] = useState(''),
@@ -23,7 +19,6 @@ function App() {
     [material, setMaterial] = useState<Material>('wood');
   useEffect(() => {
     connection.onChange = () => render((n) => n + 1);
-    connection.onVoice = (value) => setVoice(value as typeof voice);
     const world = new WorldScene(host.current!, connection);
     scene.current = world;
     connection.onBlocks = world.rebuild;
@@ -31,6 +26,15 @@ function App() {
     if (savedName) void connection.connect(savedName);
     return () => world.dispose();
   }, []);
+  const joinWorld = async () => {
+    if (connection.status === 'connected') return true;
+    const explorerName = name.trim() || 'Explorer';
+    setName(explorerName);
+    setJoined(true);
+    sessionStorage.setItem('voxel-name', explorerName);
+    await connection.connect(explorerName);
+    return connection.status === 'connected';
+  };
   return (
     <main>
       <div className="world" ref={host} />
@@ -94,9 +98,7 @@ function App() {
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              setJoined(true);
-              sessionStorage.setItem('voxel-name', name);
-              void connection.connect(name);
+              void joinWorld();
             }}
           >
             <label htmlFor="name">Explorer name</label>
@@ -114,32 +116,7 @@ function App() {
       )}
       <div className="crosshair">+</div>
       <div className="target">{target}</div>
-      <section className="voice">
-        <div className="eyebrow">VOICE LAB · MOCK ONLY</div>
-        <div className="voice-state">{voice.state}</div>
-        <p aria-live="polite">{voice.subtitle}</p>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            connection.action('voice.start', { text: voiceText });
-          }}
-        >
-          <input
-            aria-label="Mock voice text"
-            value={voiceText}
-            onChange={(e) => setVoiceText(e.target.value)}
-            maxLength={240}
-          />
-          <button disabled={!joined}>Simulate</button>
-        </form>
-        <button
-          className="interrupt"
-          onClick={() => connection.action('voice.interrupt')}
-        >
-          Interrupt
-        </button>
-        <small>No microphone · No audio · No real AI</small>
-      </section>
+      <VoicePanel connection={connection} onJoin={joinWorld} />
       <section className="chat">
         <div className="eyebrow">WORLD CHAT</div>
         <div className="messages">

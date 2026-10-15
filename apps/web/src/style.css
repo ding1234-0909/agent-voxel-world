@@ -388,6 +388,8 @@ footer {
   border-radius: 3px;
 }
 .voice button {
+  white-space: nowrap;
+  flex-shrink: 0;
   background: #dce7d5;
   padding: 8px;
   font-size: 10px;
@@ -408,4 +410,53 @@ footer {
     top: 95px;
     width: 220px;
   }
+}
+
+.voice {
+  max-height: calc(100vh - 250px);
+  overflow-y: auto;
+}
+.voice select {
+  width: 100%;
+  padding: 7px;
+  border: 1px solid #d0d9cd;
+  border-radius: 3px;
+  background: #fff;
+  font-size: 11px;
+}
+.voice-label {
+  display: block;
+  margin-top: 12px;
+  font-size: 11px;
+}
+.voice-label select {
+  margin-top: 6px;
+}
+.voice-options,
+.voice-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.voice-options select {
+  width: auto;
+}
+.voice-options label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+}
+.voice-options input {
+  width: auto;
+}
+.voice p {
+  max-height: 110px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+}
+.voice button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }

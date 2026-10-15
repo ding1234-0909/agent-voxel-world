@@ -12,7 +12,7 @@
 | edit            | `{x,y,z,material,revision}`      | material 为 grass/dirt/stone/wood 或 null；result 与 edit 广播        |
 | chat            | `{text}`，1..240 字符            | result 和公共 event                                                   |
 | observe         | `{}`                             | observation，含 self、附近玩家/方块、revision、events、allowedActions |
-| voice.start     | `{text}`，1..240 字符            | result 与仅本会话 voice 事件，文本 mock                               |
+| voice.start     | `{text,provider?}`，1..240 字符  | result 与仅本会话 voice 事件；可选 mock / browser / ollama            |
 | voice.interrupt | `{}`                             | result 与 interrupted 事件                                            |
 
 `sync` 请求完整 `snapshot`（blocks、revision、persistence）。`edit` 广播携带新版本；客户端发现版本跳跃时重新同步。全局版本用作乐观并发锁：同时提交相同版本仅一条成功，另一条收到 conflict 和最新快照。客户端不会自动重放破坏性编辑，用户基于新状态重试。
@@ -25,4 +25,6 @@
 
 ## 语音适配
 
-`VoiceProvider.create(emit)` 返回 `VoiceSession.push(input) / interrupt() / close()`。输入支持类型化 text 或 PCM16/16kHz 边界，但 mock 明确拒绝 audio。`VoiceEvent` 包含 provider、state、turn、subtitle、error。每个连接独立会话；打断取消全部延迟回调；断线关闭会话。将来真实服务适配需实现麦克风音频传输、服务端凭据、模型事件映射与真实音频播放，当前未实现也未获调用授权。
+`VoiceProvider.create(emit)` 返回 `VoiceSession.push(input) / interrupt() / close()`。输入保留类型化 text 或 PCM16/16kHz 边界，当前所有 provider 都拒绝原始 audio。网页在浏览器中完成识别，只发送文字。`VoiceEvent` 包含 provider、state、turn、subtitle、error，以及供客户端朗读的可选 speakText；房间事件附加 requestId（action id）。每个连接独立会话，每次 start 关闭旧会话并创建新会话，因此 turn 只在单次会话内有效，跨请求使用 requestId 区分。打断取消定时器或模型请求，断线关闭会话；迟到结果不再播放。
+
+`voice.start.payload.provider` 可选 mock、browser、ollama，省略时取服务端 VOICE_PROVIDER，默认 mock。browser 返回带有非 AI 标签的回声；ollama 通过服务端调用本机模型生成文字，客户端再朗读。服务端 idle 仅代表生成完成，网页 speaking/idle 由实际朗读回调控制。配置、浏览器兼容性、网络和隐私边界见 [语音接入说明](VOICE.md)。

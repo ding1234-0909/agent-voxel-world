@@ -8,7 +8,9 @@ import { WebSocketTransport } from '@colyseus/ws-transport';
 import { WorldRoom } from './room';
 const app = express();
 app.use((req, res, next) => {
-  if (req.headers.origin === 'http://127.0.0.1:5173')
+  if (
+    req.headers.origin === (process.env.WEB_ORIGIN ?? 'http://127.0.0.1:5173')
+  )
     res.header('Access-Control-Allow-Origin', req.headers.origin);
   next();
 });
@@ -17,7 +19,12 @@ app.get('/health', (_req, res) =>
     ok: true,
     protocol: 1,
     persistence: process.env.DATABASE_URL ? 'postgresql' : 'memory',
-    voice: 'mock-only',
+    voice: process.env.VOICE_PROVIDER ?? 'mock',
+    voiceProviders: [
+      'mock',
+      'browser',
+      ...(process.env.OLLAMA_MODEL ? ['ollama'] : []),
+    ],
   }),
 );
 const http = createServer(app);

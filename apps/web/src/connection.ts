@@ -21,7 +21,12 @@ export class Connection {
   private counter = 0;
   private stopped = false;
   async connect(name: string) {
-    if (this.stopped) return;
+    if (
+      this.stopped ||
+      this.status === 'connecting' ||
+      this.status === 'connected'
+    )
+      return;
     this.status = 'connecting';
     this.onChange();
     const client = new Client(
@@ -91,7 +96,7 @@ export class Connection {
         this.status = 'disconnected';
         this.onVoice({
           state: 'interrupted',
-          subtitle: 'Connection lost; mock session stopped.',
+          subtitle: '连接中断，语音会话已停止。',
         });
         this.onChange();
         setTimeout(() => {
@@ -116,8 +121,11 @@ export class Connection {
     }
   }
   action(type: string, payload: unknown = {}) {
-    if (this.status === 'connected')
-      this.room?.send('action', { id: `web-${++this.counter}`, type, payload });
+    if (this.status === 'connected' && this.room) {
+      const id = `web-${++this.counter}`;
+      this.room.send('action', { id, type, payload });
+      return id;
+    }
   }
   dispose() {
     this.stopped = true;

@@ -99,13 +99,33 @@ export class WorldRoom extends Room<WorldState> {
           payload.text.length > 240
         )
           return this.reply(client, id, false, 'invalid-voice-input');
-        let voice = this.voices.get(client.sessionId);
-        if (!voice) {
-          voice = this.voiceProvider.create((event) =>
-            client.send('voice', event),
-          );
-          this.voices.set(client.sessionId, voice);
+        this.voices.get(client.sessionId)?.close();
+        this.voices.delete(client.sessionId);
+        let provider;
+        try {
+          if (
+            payload.provider !== undefined &&
+            typeof payload.provider !== 'string'
+          )
+            throw Error('无效语音方案。');
+          provider =
+            payload.provider === undefined
+              ? this.voiceProvider
+              : createVoiceProvider(payload.provider);
+        } catch (error) {
+          client.send('voice', {
+            requestId: id,
+            provider: payload.provider,
+            state: 'error',
+            turn: 0,
+            subtitle: error instanceof Error ? error.message : '语音配置错误。',
+          });
+          return this.reply(client, id, false, 'voice-provider-unavailable');
         }
+        const voice = provider.create((event) =>
+          client.send('voice', { ...event, requestId: id }),
+        );
+        this.voices.set(client.sessionId, voice);
         voice.push({ kind: 'text', text: payload.text });
         return this.reply(client, id, true);
       }

@@ -104,7 +104,8 @@ export class WorldScene {
     this.camera.updateProjectionMatrix();
   };
   private keydown = (event: KeyboardEvent) => {
-    if ((event.target as HTMLElement).matches('input,textarea,button')) return;
+    if ((event.target as HTMLElement).matches('input,textarea,button,select'))
+      return;
     this.keys.add(event.code);
     if (event.code === 'Space') event.preventDefault();
   };
