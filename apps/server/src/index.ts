@@ -1,4 +1,13 @@
 import express from 'express';
-const app = express();
-app.get('/health', (_req, res) => res.json({ ok: true, phase: 'scaffold' }));
-app.listen(2567, '127.0.0.1', () => console.log('Voxel server http://127.0.0.1:2567'));
+import { createServer } from 'node:http';
+import { Server } from '@colyseus/core';
+import { WebSocketTransport } from '@colyseus/ws-transport';
+import { WorldRoom } from './room';
+const app=express();
+app.get('/health',(_req,res)=>res.json({ok:true,protocol:1,persistence:'memory',voice:'mock-only'}));
+const http=createServer(app);
+const server=new Server({transport:new WebSocketTransport({server:http,maxPayload:16384}),greet:false});
+server.define('world',WorldRoom);
+const port=Number(process.env.PORT??2567);
+await server.listen(port,'127.0.0.1');
+console.log(`Voxel server http://127.0.0.1:${port}`);
