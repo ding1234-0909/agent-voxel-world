@@ -13,7 +13,9 @@
     "db:start": "node scripts/database.mjs",
     "db:stop": "node scripts/database.mjs stop",
     "db:generate": "pnpm --filter @voxel/server exec prisma generate",
-    "db:migrate": "pnpm --filter @voxel/server exec dotenv -e ../../.env -- prisma migrate deploy"
+    "db:migrate": "pnpm --filter @voxel/server exec dotenv -e ../../.env -- prisma migrate deploy",
+    "agent": "pnpm --filter @voxel/agent start",
+    "test:integration": "pnpm --filter @voxel/agent test:integration"
   },
   "devDependencies": {
     "typescript": "~5.9.3",

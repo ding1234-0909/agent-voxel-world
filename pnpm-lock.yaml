@@ -24,6 +24,15 @@ importers:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@22.20.5)(jiti@2.7.0)(tsx@4.23.15)
 
+  apps/agent:
+    dependencies:
+      '@voxel/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      colyseus.js:
+        specifier: ^0.16.19
+        version: 0.16.22
+
   apps/server:
     dependencies:
       '@colyseus/core':

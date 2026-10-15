@@ -1,0 +1,14 @@
+{
+  "name": "@voxel/agent",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/demo.ts",
+    "test:integration": "tsx src/integration.ts",
+    "build": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@voxel/shared": "workspace:*",
+    "colyseus.js": "^0.16.19"
+  }
+}
