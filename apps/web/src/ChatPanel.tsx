@@ -3,6 +3,7 @@ import type { ChatEntry, Player } from '@voxel/shared';
 import type { Connection } from './connection';
 import { LocalRecorder, voiceApi } from './local-recorder';
 import { ClipRecorder } from './clip-recorder';
+import { mentionQuery, consumeMention } from './chat-mentions';
 function AudioMessage({
   entry,
   connection,
@@ -76,9 +77,15 @@ export function ChatPanel({ connection }: { connection: Connection }) {
   const [text, setText] = useState(''),
     [scope, setScope] = useState<'public' | 'private'>('public'),
     [recipients, setRecipients] = useState<Player[]>([]);
-  const [query, setQuery] = useState<string | null>(null),
-    [cursor, setCursor] = useState(0),
-    [choice, setChoice] = useState(0);
+  const [picker, setPicker] = useState<
+    | NonNullable<ReturnType<typeof mentionQuery>>
+    | { source: 'button'; query: string }
+    | null
+  >(null);
+  const [choice, setChoice] = useState(0);
+  const panel = useRef<HTMLElement>(null);
+  const search = useRef<HTMLInputElement>(null);
+  const caret = useRef(0);
   const [status, setStatus] = useState(''),
     [error, setError] = useState(''),
     [mode, setMode] = useState<
@@ -104,10 +111,28 @@ export function ChatPanel({ connection }: { connection: Connection }) {
         p.connected &&
         p.id !== connection.room?.sessionId &&
         !recipients.some((r) => r.id === p.id) &&
-        (query === '' ||
-          p.name.toLowerCase().includes((query ?? '').toLowerCase())),
+        p.name
+          .toLowerCase()
+          .includes((picker?.query ?? '').trim().toLowerCase()),
     )
-    .slice(0, 8);
+    .sort((a, b) => Number(b.kind !== 'human') - Number(a.kind !== 'human'));
+  const activeChoice = candidates.length ? choice % candidates.length : 0;
+  useEffect(() => {
+    if (picker?.source === 'button') search.current?.focus();
+  }, [picker?.source]);
+  useEffect(() => {
+    if (!picker) return;
+    panel.current
+      ?.querySelector('[role=option][aria-selected=true]')
+      ?.scrollIntoView({ block: 'nearest' });
+  }, [choice, picker?.query]);
+  useEffect(() => {
+    const outside = (event: PointerEvent) => {
+      if (!panel.current?.contains(event.target as Node)) setPicker(null);
+    };
+    document.addEventListener('pointerdown', outside);
+    return () => document.removeEventListener('pointerdown', outside);
+  }, []);
   useEffect(() => {
     if (!clip) {
       setPreview('');
@@ -140,25 +165,42 @@ export function ChatPanel({ connection }: { connection: Connection }) {
   useEffect(() => {
     list.current?.scrollTo({ top: list.current.scrollHeight });
   }, [connection.chats.length]);
+  const openPicker = () => {
+    setPicker({ source: 'button', query: '' });
+    setChoice(0);
+    setError('');
+  };
   const select = (p: Player) => {
+    if (recipients.some((r) => r.id === p.id)) return;
     if (recipients.length >= 8) {
-      setError('最多选择 8 位接收者。');
+      setError('最多选择 8 位接收者，请先移除一位。');
       return;
     }
-    const before = text.slice(0, cursor),
-      at = before.lastIndexOf('@');
-    setText(
-      (at >= 0 ? text.slice(0, at) : text) + `@${p.name} ` + text.slice(cursor),
-    );
+    const next =
+      picker?.source === 'input'
+        ? consumeMention(text, picker.start, picker.end)
+        : { text, caret: caret.current };
+    setText(next.text);
     setRecipients((r) => [...r, p]);
-    setQuery(null);
-    input.current?.focus();
+    setPicker(null);
+    setError('');
+    requestAnimationFrame(() => {
+      input.current?.focus();
+      input.current?.setSelectionRange(next.caret, next.caret);
+    });
   };
   const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (query === null) return;
+    // Enter confirms an IME candidate; it must never select a player or send.
+    if (e.nativeEvent.isComposing || e.keyCode === 229) {
+      if (e.key === 'Enter') e.preventDefault();
+      return;
+    }
+    if (!picker) return;
     if (e.key === 'Escape') {
-      setQuery(null);
+      setPicker(null);
       e.preventDefault();
+      e.stopPropagation();
+      input.current?.focus();
     }
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
@@ -170,9 +212,9 @@ export function ChatPanel({ connection }: { connection: Connection }) {
           Math.max(1, candidates.length),
       );
     }
-    if (e.key === 'Enter' && candidates.length) {
+    if (e.key === 'Enter' || (e.key === 'Tab' && candidates.length)) {
       e.preventDefault();
-      select(candidates[choice % candidates.length]);
+      if (candidates.length) select(candidates[activeChoice]);
     }
   };
   const record = (kind: 'text' | 'audio') => {
@@ -240,6 +282,7 @@ export function ChatPanel({ connection }: { connection: Connection }) {
       return;
     }
     if (!clip && !text.trim()) return;
+    setPicker(null);
     setMode('sending');
     const abort = new AbortController();
     upload.current = abort;
@@ -283,6 +326,8 @@ export function ChatPanel({ connection }: { connection: Connection }) {
         setText('');
         setStatus('已发送。');
       }
+      if (scope === 'public') setRecipients([]);
+      input.current?.focus();
     } catch (e) {
       if (!abort.signal.aborted) setError((e as Error).message);
       else setError('发送已取消或超时，请确认消息记录后再重试。');
@@ -292,7 +337,8 @@ export function ChatPanel({ connection }: { connection: Connection }) {
   };
   return (
     <section
-      className={`chat enhanced-chat dock-panel${collapsed ? ' is-collapsed' : ''}`}
+      ref={panel}
+      className={`chat enhanced-chat dock-panel${collapsed ? ' is-collapsed' : ''}${picker ? ' is-picking' : ''}${picker?.source === 'button' ? ' picker-manual' : ''}`}
       aria-label="世界聊天"
     >
       <button
@@ -326,7 +372,10 @@ export function ChatPanel({ connection }: { connection: Connection }) {
             aria-pressed={scope === 'private'}
             disabled={busy}
             title="仅发送给选中的 @ 对象"
-            onClick={() => setScope('private')}
+            onClick={() => {
+              setScope('private');
+              if (!recipients.length) openPicker();
+            }}
           >
             私聊
           </button>
@@ -339,6 +388,7 @@ export function ChatPanel({ connection }: { connection: Connection }) {
           onClick={() => {
             setCollapsedAt(connection.chats.at(-1)?.seq ?? 0);
             setCollapsed(true);
+            setPicker(null);
           }}
         >
           ›
@@ -368,6 +418,17 @@ export function ChatPanel({ connection }: { connection: Connection }) {
                   : ''}
               </small>
             </div>
+            {e.data.scope === 'public' && e.data.recipients.length > 0 && (
+              <div className="chat-message-mentions">
+                {e.data.recipients.map((id) => (
+                  <span key={id}>
+                    @
+                    {connection.players.find((p) => p.id === id)?.name ??
+                      '已离线玩家'}
+                  </span>
+                ))}
+              </div>
+            )}
             {e.data.kind === 'audio' ? (
               <AudioMessage entry={e} connection={connection} />
             ) : (
@@ -377,7 +438,10 @@ export function ChatPanel({ connection }: { connection: Connection }) {
         ))}
       </div>
       {recipients.length > 0 && (
-        <div className="chat-recipients">
+        <div className="chat-recipients" aria-label="已选对象">
+          <span className="recipient-label">
+            {scope === 'private' ? '发送给' : '提醒'}
+          </span>
           {recipients.map((p) => (
             <button
               key={p.id}
@@ -394,6 +458,14 @@ export function ChatPanel({ connection }: { connection: Connection }) {
               ×
             </button>
           ))}
+          <button
+            type="button"
+            disabled={busy}
+            onClick={openPicker}
+            aria-label="添加接收者"
+          >
+            ＋
+          </button>
         </div>
       )}
       {preview && (
@@ -402,6 +474,98 @@ export function ChatPanel({ connection }: { connection: Connection }) {
           <button disabled={busy} onClick={() => setClip(undefined)}>
             丢弃录音
           </button>
+        </div>
+      )}
+      {picker && (
+        <div className="mention-picker">
+          <div className="mention-heading">
+            <strong>
+              {scope === 'private' ? '选择私聊对象' : '想提醒谁？'}
+            </strong>
+            <small>{recipients.length}/8 已选</small>
+            <button
+              type="button"
+              aria-label="关闭选人列表"
+              onClick={() => {
+                setPicker(null);
+                input.current?.focus();
+              }}
+            >
+              ×
+            </button>
+          </div>
+          {picker.source === 'button' && (
+            <input
+              ref={search}
+              className="mention-search"
+              aria-label="搜索玩家或 Agent"
+              role="combobox"
+              aria-autocomplete="list"
+              aria-expanded={true}
+              aria-controls="chat-mentions"
+              aria-activedescendant={
+                candidates.length
+                  ? `mention-${candidates[activeChoice].id}`
+                  : undefined
+              }
+              placeholder="搜索玩家或 Agent…"
+              value={picker.query}
+              onKeyDown={onKey}
+              onChange={(e) => {
+                setPicker({ source: 'button', query: e.target.value });
+                setChoice(0);
+              }}
+            />
+          )}
+          <div
+            id="chat-mentions"
+            className="mention-list"
+            role="listbox"
+            aria-label="选择接收者"
+          >
+            {candidates.length ? (
+              candidates.map((p, i) => (
+                <button
+                  type="button"
+                  role="option"
+                  id={`mention-${p.id}`}
+                  aria-selected={activeChoice === i}
+                  key={p.id}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => select(p)}
+                >
+                  <span
+                    className={`mention-avatar ${p.kind === 'human' ? 'human' : 'agent'}`}
+                    aria-hidden="true"
+                  >
+                    {p.kind === 'human' ? '●' : '◇'}
+                  </span>
+                  <span className="mention-name">
+                    {p.name}
+                    <small>
+                      {p.kind === 'human' ? '玩家' : 'Agent'} · 在线
+                      {connection.players.filter(
+                        (other) => other.name === p.name,
+                      ).length > 1
+                        ? ` · ${p.id.slice(-4)}`
+                        : ''}
+                    </small>
+                  </span>
+                  <span className="mention-pick" aria-hidden="true">
+                    ↵
+                  </span>
+                </button>
+              ))
+            ) : (
+              <p className="mention-empty">
+                {picker.query.trim()
+                  ? '没有找到匹配的玩家或 Agent'
+                  : '没有其他可选的在线玩家'}
+                <small>关闭列表后，可点击标签上的 × 移除已选对象。</small>
+              </p>
+            )}
+          </div>
+          <div className="mention-hint">↑ ↓ 选择 · Enter 确认 · Esc 关闭</div>
         </div>
       )}
       <form
@@ -414,11 +578,20 @@ export function ChatPanel({ connection }: { connection: Connection }) {
           <input
             ref={input}
             aria-label="Chat message"
-            aria-expanded={query !== null}
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={picker?.source === 'input'}
+            aria-activedescendant={
+              picker?.source === 'input' && candidates.length
+                ? `mention-${candidates[activeChoice].id}`
+                : undefined
+            }
             aria-controls="chat-mentions"
             placeholder={
               scope === 'private'
-                ? '输入 @ 选择玩家或 Agent…'
+                ? recipients.length
+                  ? '发送私聊消息…'
+                  : '先选择私聊对象…'
                 : '说点什么，@ 选择玩家…'
             }
             disabled={busy || !!clip}
@@ -428,46 +601,25 @@ export function ChatPanel({ connection }: { connection: Connection }) {
             onChange={(e) => {
               setText(e.target.value);
               const pos = e.target.selectionStart ?? 0;
-              setCursor(pos);
-              const match = e.target.value
-                .slice(0, pos)
-                .match(/(?:^|\s)@([^@\n]*)$/);
-              setQuery(match?.[1] ?? null);
+              caret.current = pos;
+              setPicker(mentionQuery(e.target.value, pos));
               setChoice(0);
             }}
+            onSelect={(e) => {
+              caret.current = e.currentTarget.selectionStart ?? 0;
+              if (picker?.source !== 'button')
+                setPicker(mentionQuery(e.currentTarget.value, caret.current));
+            }}
           />
-          {query !== null && (
-            <div
-              id="chat-mentions"
-              className="mention-list"
-              role="listbox"
-              aria-label="选择接收者"
-            >
-              {candidates.length ? (
-                candidates.map((p, i) => (
-                  <button
-                    type="button"
-                    role="option"
-                    aria-selected={choice === i}
-                    key={p.id}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => select(p)}
-                  >
-                    {p.name}{' '}
-                    <small>
-                      {p.kind === 'human' ? '玩家' : 'Agent'} · {p.id.slice(-4)}
-                    </small>
-                  </button>
-                ))
-              ) : (
-                <p>没有匹配的在线玩家</p>
-              )}
-            </div>
-          )}
         </div>
         <button
           className="chat-send"
-          disabled={!connected || busy || (!clip && !text.trim())}
+          disabled={
+            !connected ||
+            busy ||
+            (!clip && !text.trim()) ||
+            (scope === 'private' && !recipients.length)
+          }
           aria-label="发送消息"
           title="发送消息"
         >
@@ -522,25 +674,21 @@ export function ChatPanel({ connection }: { connection: Connection }) {
         )}
         {!busy && (
           <button
-            disabled={!!clip}
-            onClick={() => {
-              const next =
-                text + (text && !text.endsWith(' ') ? ' ' : '') + '@';
-              setCursor(next.length);
-              setText(next);
-              setQuery('');
-              input.current?.focus();
-            }}
+            aria-label="选择要 @ 的玩家或 Agent"
+            aria-expanded={picker !== null}
+            aria-controls="chat-mentions"
+            onClick={openPicker}
           >
-            {' '}
-            @{' '}
+            @ 选人
           </button>
         )}
       </div>
       <small className="chat-help chat-scope-help">
         {scope === 'private'
-          ? '仅 @ 已选玩家和 Agent 可收到。'
-          : '所有在线玩家和 Agent 均可收到。'}
+          ? '仅已选对象可收到，接收者会保留用于连续私聊。'
+          : recipients.length
+            ? '所有人可见，已选对象会被提醒；Agent 可被唤醒。'
+            : '所有人可见，输入 @ 或点击选人来提醒对方。'}
       </small>
       {status && (
         <p role="status" className="chat-help">

@@ -1527,27 +1527,131 @@ footer {
 .chat-recipients button {
   font-size: 10px;
 }
-.mention-list {
-  max-height: 135px;
-  overflow-y: auto;
-  background: #fff;
-  border: 1px solid #cbd5c8;
-  border-radius: 4px;
-  margin-top: 5px;
+.recipient-label {
+  align-self: center;
+  font-size: 10px;
+  color: #687f70;
+  margin-right: 3px;
 }
-.mention-list button {
-  display: block;
-  text-align: left;
-  width: 100%;
+.chat-recipients {
+  max-height: 76px;
+  overflow-y: auto;
+  align-items: center;
+}
+.chat-message-mentions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 6px;
+  color: #3e6b55;
+  font-size: 10px;
+}
+.mention-picker {
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px solid #cbd8c9;
+  border-radius: 10px;
+  background: #f8faf3;
+  box-shadow: 0 4px 14px #263e3010;
+}
+.mention-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.mention-heading strong {
+  flex: 1;
+  font-size: 12px;
+}
+.mention-heading small {
+  color: #738272;
+  font-size: 10px;
+}
+.mention-heading button {
+  padding: 2px 7px;
+  font-size: 17px;
   background: transparent;
 }
-.mention-list button[aria-selected='true'] {
-  background: #dce7d5;
+.enhanced-chat .mention-search {
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid #d5dfd1;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 12px;
+  margin-bottom: 6px;
 }
-.mention-list small {
+.mention-list {
+  max-height: clamp(72px, calc(100dvh - 620px), 150px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.mention-list button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  text-align: left;
+  width: 100%;
+  padding: 8px;
+  border-radius: 6px;
+  background: transparent;
+}
+.mention-list button[aria-selected='true'],
+.mention-list button:hover {
+  background: #e3eddf;
+}
+.mention-avatar {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: #e3e9df;
+  color: #69866c;
+  font-size: 17px;
+}
+.mention-avatar.agent {
+  color: #f6f8ee;
+  background: #476b58;
+}
+.mention-name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  font-weight: 600;
+}
+.mention-name small,
+.mention-empty small {
+  display: block;
+  margin-top: 3px;
+  color: #778677;
+  font-size: 10px;
+  font-weight: 400;
+}
+.mention-pick {
+  color: #72917d;
+  font-size: 14px;
+  opacity: 0;
+}
+.mention-list button[aria-selected='true'] .mention-pick {
+  opacity: 1;
+}
+.mention-empty {
+  padding: 12px 4px;
+  margin: 0;
+  font-size: 12px;
+  color: #607567;
+}
+.mention-hint {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #e0e7db;
+  color: #7d8c7a;
   font-size: 9px;
 }
-.mention-list p,
 .chat-help {
   font-size: 10px;
   line-height: 1.6;
@@ -1648,4 +1752,14 @@ footer {
 .communication .dock-tab:focus-visible {
   outline: 2px solid #365e4d;
   outline-offset: -3px;
+}
+
+/* The picker temporarily uses the history area, keeping the composer reachable. */
+.enhanced-chat.is-picking .messages,
+.enhanced-chat.is-picking .chat-recipients,
+.enhanced-chat.is-picking .chat-tools,
+.enhanced-chat.is-picking .chat-help,
+.enhanced-chat.is-picking .voice-draft,
+.enhanced-chat.picker-manual form {
+  display: none;
 }
