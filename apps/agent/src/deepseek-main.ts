@@ -38,7 +38,8 @@ try {
       true,
     );
   if (!abort.signal.aborted)
-    await runAgent(session, new DeepSeekPlanner(config), config, abort.signal);
+    await session.request('agent.voice', { enabled: !!config.voiceReplies });
+  await runAgent(session, new DeepSeekPlanner(config), config, abort.signal);
 } catch (error) {
   if (!abort.signal.aborted) {
     console.error(

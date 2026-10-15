@@ -1,11 +1,13 @@
 import { spatialMix, type Player } from '@voxel/shared';
 import type { Connection } from './connection';
+import { AgentSpeechPlayback } from './agent-speech-playback';
 export type SpatialStatus = {
   sending: boolean;
   listening: boolean;
   pending: boolean;
   connected: number;
   error: string;
+  agentSpeaking?: string;
 };
 type Signal = {
   from: string;
@@ -32,8 +34,10 @@ type Link = Pick<
   | 'action'
   | 'chatRecording'
   | 'voiceLabRecording'
+  | 'chatToken'
 >;
 export class SpatialVoice {
+  readonly agentSpeech: AgentSpeechPlayback;
   state: SpatialStatus = {
     sending: false,
     listening: false,
@@ -60,7 +64,18 @@ export class SpatialVoice {
         },
         video: false,
       }),
-  ) {}
+  ) {
+    this.agentSpeech = new AgentSpeechPlayback(
+      link,
+      () => this.context,
+      () => this.state.listening,
+      (text, error) => {
+        this.state.agentSpeaking = text;
+        if (error) this.state.error = error;
+        this.emit();
+      },
+    );
+  }
   private emit() {
     this.state.connected = [...this.peers.values()].filter(
       (p) => p.pc.connectionState === 'connected',
@@ -150,6 +165,7 @@ export class SpatialVoice {
       }
     }
     this.state.listening = enabled;
+    if (!enabled) this.agentSpeech.stop();
     this.announce();
   }
   private ensure(id: string) {
@@ -257,6 +273,7 @@ export class SpatialVoice {
     p.source.connect(p.gain).connect(p.pan).connect(this.context.destination);
   }
   update() {
+    this.agentSpeech.update();
     const self = this.link.self;
     if (this.link.status !== 'connected' || !self) {
       this.reset();
@@ -312,6 +329,7 @@ export class SpatialVoice {
     p.pan?.disconnect();
   }
   private reset() {
+    this.agentSpeech.stop();
     if (this.stream || this.state.pending) this.onMicrophone(undefined);
     this.generation++;
     this.listenGeneration++;

@@ -32,12 +32,14 @@ export function SpatialVoicePanel({ connection }: { connection: Connection }) {
     };
     engine.current = voice;
     connection.onSpatialSignal = voice.signal;
+    connection.onAgentSpeech = voice.agentSpeech.receive;
     connection.stopSpatialInput = voice.stopMic;
     const unload = () => voice.dispose();
     window.addEventListener('pagehide', unload);
     return () => {
       window.removeEventListener('pagehide', unload);
       connection.onSpatialSignal = () => {};
+      connection.onAgentSpeech = () => {};
       connection.stopSpatialInput = () => {};
       voice.dispose();
       transcriber.stop();
@@ -118,6 +120,12 @@ export function SpatialVoicePanel({ connection }: { connection: Connection }) {
       </div>
       <small>18 格内随距离、朝向变化 · {state.connected} 个语音连接</small>
       <small>开启麦克风会同步本机转写，附近 Agent 自动接收。</small>
+      <small>开启收听可听见附近 Agent 的语音回复；私聊仅接收者可听。</small>
+      {state.agentSpeaking && (
+        <p className="spatial-caption" role="status">
+          正在说话 · {state.agentSpeaking}
+        </p>
+      )}
       <small role="status">{transcript.status}</small>
       {transcript.text && <p className="spatial-caption">{transcript.text}</p>}
       {transcript.error && (

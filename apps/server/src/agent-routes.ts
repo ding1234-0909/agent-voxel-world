@@ -81,6 +81,12 @@ export function installAgentRoutes(app: Express, manager: AgentManager) {
     route((req, res) => res.status(201).json(manager.create(req.body))),
   );
   app.post(
+    '/agents/:id/voice',
+    route(async (req, res) =>
+      res.json(await manager.setVoice(String(req.params.id), req.body)),
+    ),
+  );
+  app.post(
     '/agents/:id/resume',
     route((req, res) =>
       res.json(manager.resume(String(req.params.id), req.body)),

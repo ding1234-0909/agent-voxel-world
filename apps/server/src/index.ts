@@ -53,6 +53,10 @@ installChatRoutes(
   app,
   () =>
     (matchMaker.getLocalRoomById(world.roomId) as WorldRoom | undefined)?.chat,
+  undefined,
+  () =>
+    (matchMaker.getLocalRoomById(world.roomId) as WorldRoom | undefined)
+      ?.agentSpeech,
 );
 installPresenceRoutes(app, () =>
   (

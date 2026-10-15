@@ -7,6 +7,7 @@ import {
   type Edit,
   type WorldEvent,
   type ChatEntry,
+  type AgentSpeechEvent,
 } from '@voxel/shared';
 export class Connection {
   room?: Room;
@@ -31,6 +32,7 @@ export class Connection {
   voiceLabRecording = false;
   stopSpatialInput = () => {};
   onSpatialSignal: (value: any) => void = () => {};
+  onAgentSpeech: (value: AgentSpeechEvent) => void = () => {};
   private replies = new Map<
     string,
     {
@@ -146,6 +148,9 @@ export class Connection {
       });
       room.onMessage('spatial.signal', (value) => {
         if (activeRoom()) this.onSpatialSignal(value);
+      });
+      room.onMessage('agent.speech', (value: AgentSpeechEvent) => {
+        if (activeRoom()) this.onAgentSpeech(value);
       });
       room.onMessage('event', (e: WorldEvent) => {
         if (!activeRoom()) return;

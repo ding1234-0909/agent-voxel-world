@@ -1,4 +1,5 @@
 import { WorldChat } from './chat';
+import { AgentSpeech } from './agent-speech';
 import { createVoiceProvider, type VoiceSession } from './voice';
 import { WorldStore } from './store';
 import { Room, Client } from '@colyseus/core';
@@ -30,6 +31,7 @@ class Avatar extends Schema {
   connected = true;
   voiceSending = false;
   voiceListening = false;
+  voiceReplies = false;
 }
 defineTypes(Avatar, {
   id: 'string',
@@ -42,6 +44,7 @@ defineTypes(Avatar, {
   connected: 'boolean',
   voiceSending: 'boolean',
   voiceListening: 'boolean',
+  voiceReplies: 'boolean',
 });
 class WorldState extends Schema {
   players = new MapSchema<Avatar>();
@@ -51,6 +54,17 @@ defineTypes(WorldState, { players: { map: Avatar }, revision: 'number' });
 const zero: Input = { x: 0, z: 0, jump: false, yaw: 0 };
 let activeRoom = false;
 export class WorldRoom extends Room<WorldState> {
+  agentSpeech = new AgentSpeech(
+    () => this.state.players.values(),
+    (recipient, event) =>
+      this.clients
+        .find((c) => c.sessionId === recipient)
+        ?.send('agent.speech', event),
+    (actor, message) =>
+      this.clients
+        .find((c) => c.sessionId === actor)
+        ?.send('agent.speech.error', { message }),
+  );
   chat = new WorldChat(
     () => this.state.players.values(),
     (actor, data) => this.chatEvent(actor, data),
@@ -97,6 +111,18 @@ export class WorldRoom extends Room<WorldState> {
       )
         return this.reply(client, '', false, 'invalid-envelope');
       const { id, type, payload } = value;
+      if (type === 'agent.voice') {
+        const player = this.state.players.get(client.sessionId);
+        if (
+          !player ||
+          !['ai-agent', 'scripted-agent'].includes(player.kind) ||
+          typeof payload?.enabled !== 'boolean'
+        )
+          return this.reply(client, id, false, 'invalid-agent-voice');
+        player.voiceReplies = payload.enabled;
+        if (!payload.enabled) this.agentSpeech.cancel(player.id);
+        return this.reply(client, id, true);
+      }
       if (type === 'rename') {
         const player = this.state.players.get(client.sessionId);
         if (
@@ -341,6 +367,7 @@ export class WorldRoom extends Room<WorldState> {
     this.event('joined', p.id, { name: p.name, kind: p.kind });
   }
   async onLeave(client: Client, consented: boolean) {
+    this.agentSpeech.cancel(client.sessionId);
     this.voices.get(client.sessionId)?.close();
     this.voices.delete(client.sessionId);
     const p = this.state.players.get(client.sessionId);
@@ -371,6 +398,7 @@ export class WorldRoom extends Room<WorldState> {
     this.event('left', client.sessionId, {});
   }
   async onDispose() {
+    this.agentSpeech.close();
     for (const voice of this.voices.values()) voice.close();
     this.voices.clear();
     this.chat.clear();
@@ -444,6 +472,7 @@ export class WorldRoom extends Room<WorldState> {
     if (this.events.length > 100) this.events.shift();
     for (const client of this.clients)
       if (visibleEvent(event, client.sessionId)) client.send('event', event);
+    this.agentSpeech.enqueue(actor, data);
   }
   private observe(client: Client, id: string) {
     const self = this.state.players.get(client.sessionId)!;

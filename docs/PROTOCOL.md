@@ -52,3 +52,11 @@ GET `/world/presence` 是独立的只读 SSE 订阅，连接后立即发送完�
 可听阈值为共享 spatialMix 的 gain >= 0.03，真人需要 voiceListening，Agent 自动接收。nearby 与 private 一样过滤 WebSocket 事件和 observe，不属于全世界广播；Agent 执行器将 nearby 回复限制为发给说话者的私聊，公共推理轮次不携带附近谈话上下文。
 
 片段 id 绑定发送者，单次使用，45 秒过期，每人最多 4 个捕获/处理中的片段。DELETE `/chat/spatial/:id` 撤销片段；关闭麦克风或会话撤销时同时取消该玩家全部片段及正在执行的识别。所有接口沿用 chat 的 Origin 和会话凭证校验，识别结果发布前再次校验会话与片段有效性。
+
+## Agent 空间语音回复
+
+Agent 专用动作 `agent.voice: {enabled:boolean}` 设置 Avatar 的 `voiceReplies`；真人调用拒绝。托管控制台 POST `/agents/:id/voice` 可即时更新并保存开关，创建/编辑配置也支持 `voiceReplies`。已有配置默认为 false，独立 DeepSeek 进程通过 `AGENT_VOICE_REPLIES=true` 开启。
+
+Agent 的 public/private 文字聊天触发服务端本机 TTS；文字事件照常即时投递。合成后仅授权听者收到 `agent.speech: {id,actor,text,scope,durationMs,expiresAt}`，使用当前会话凭证 GET `/chat/agent-speech/:id` 获取 WAV。听者必须在发言和合成完成时都开启收听、在线且 spatialMix.gain >= 0.03；private 还必须在原接收者列表。下载时再次核验身份、双方状态和可听范围；失效/越权返回 404。音频不放入观察历史，防止 Agent 互相重复消费自己的朗读。
+
+关闭 Agent 语音、离开或断线撤销其排队合成与缓存；合成失败仅向该 Agent 发 `agent.speech.error: {message}`，不会撤销文字。音频缓存最长 120 秒、24 段 / 32 MiB，合成串行，等待队列最多 8 段且每角色最多 2 段，排队超过 30 秒跳过。`GET /voice/capabilities` 中 `agentSpeech: {available,reason}` 表示本机合成可用性。

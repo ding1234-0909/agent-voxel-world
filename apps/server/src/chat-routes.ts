@@ -1,10 +1,12 @@
 import express, { type Express, type ErrorRequestHandler } from 'express';
 import { ChatError, type WorldChat } from './chat';
 import { LocalSpeech, SpeechError } from './local-speech';
+import type { AgentSpeech } from './agent-speech';
 export function installChatRoutes(
   app: Express,
   getChat: () => WorldChat | undefined,
   speech = new LocalSpeech(),
+  getAgentSpeech: () => AgentSpeech | undefined = () => undefined,
 ) {
   const origin = process.env.WEB_ORIGIN ?? 'http://127.0.0.1:5173';
   app.use('/chat', (req, res, next) => {
@@ -146,6 +148,17 @@ export function installChatRoutes(
       }
     },
   );
+  app.get('/chat/agent-speech/:id', (req, res, next) => {
+    try {
+      const service = getAgentSpeech();
+      if (!service) throw new ChatError('Agent 语音服务未就绪。', 503);
+      res
+        .type('audio/wav')
+        .send(service.audio(String(req.params.id), res.locals.actor));
+    } catch (e) {
+      next(e);
+    }
+  });
   app.get('/chat/audio/:id', (req, res, next) => {
     try {
       res

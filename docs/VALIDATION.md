@@ -163,3 +163,11 @@
 
 - 角色头顶增加朝向镜头的名称牌，显示昵称和玩家/Agent 身份徽标；长昵称省略，近处限制尺寸，12–18 格逐渐淡出，墙体正常遮挡。名称变化时更新纹理，角色离开时释放纹理与材质。
 - 类型检查、格式检查、前端生产构建通过。独立 WorldScene 场景验证中英文名称、改名后纹理更新、转身保持可读、墙体遮挡以及 20 格处隐藏，浏览器无 warning/error。未改动真实玩家、Agent 或世界状态，临时页面已清理。截图：`output/avatars/nameplates.png`。
+
+## 2026-10-16 Agent 附近语音回复
+
+- Agent 聊天文字经服务器 macOS say → FFmpeg 合成为 WAV，复用游戏距离/朝向混音；私聊语音按接收者和附近可听范围双重过滤。控制台支持创建/编辑语音开关，运行中也可即时切换，不重启任务、不额外调用模型；关闭收听停止播放及排队，关闭 Agent 语音撤销缓存和合成。
+- `pnpm check` 通过：类型、148/148 单元测试、全部应用构建。沙箱内 localhost/IPC 限制导致测试无法启动，沙箱外重跑通过。新增测试覆盖路由受众、权限撤销、合成取消、播放去重、动态距离/朝向/声道、静音期间解码返回和播放失败后的资源清理。
+- `pnpm test:agents`、`pnpm test:chat`、`REAL_TTS=1 pnpm test:agent:voice` 全部通过。真实本机合成及四个 WebSocket 客户端验证附近群发、远处无事件、私聊旁观者无事件且 HTTP 404、关闭收听和 Agent 语音后的访问撤销。没有调用付费模型。
+- 两个隔离浏览器页面使用实际 Connection、SpatialVoicePanel 和真实本机 TTS，验证双端群聊播放、私聊仅指定端播放、关闭收听立即停止。音量与朝向参数由实际播放节点的单元测试验证；未使用硬件麦克风、未做跨设备/NAT 验收。临时页面、服务器与标签页已清理。截图：`output/communication/agent-spatial-speech.png`、`output/communication/agent-private-speech.png`。
+- 本机 2577 后端已更新；重启前备份内存世界，重启后逐块比对 2251 个方块及 revision 392 完全一致。AI 探索者恢复原位置和在线待命，在正式 5187 页面打开语音回复并核实 API 已保存、capabilities 可用；没有启动新模型轮次。正式控制台截图：`output/communication/agent-voice-enabled.png`。

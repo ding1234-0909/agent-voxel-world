@@ -23,6 +23,7 @@ export type AgentSettings = {
   timeoutMs: number;
   maxTokens: number;
   allowEdits: boolean;
+  voiceReplies?: boolean;
   thinking: 'enabled' | 'disabled';
   reasoningEffort: 'none' | 'low' | 'high' | 'max';
 };

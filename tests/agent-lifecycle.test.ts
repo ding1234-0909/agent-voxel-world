@@ -24,6 +24,7 @@ function fakeSession(wait = Promise.resolve()) {
     onEvent: undefined as ((event: WorldEvent) => void) | undefined,
     room: {
       sessionId: 'player-1',
+      onMessage: vi.fn(),
       onLeave: (cb: () => void) => leaves.push(cb),
       connection: { close: () => {} },
     },
@@ -42,7 +43,7 @@ function fakeSession(wait = Promise.resolve()) {
       async () =>
         ({ self: { id: 'player-1' }, events: [] }) as unknown as Observation,
     ),
-    request: vi.fn(),
+    request: vi.fn(async () => ({ ok: true })),
   };
   return session;
 }
@@ -63,6 +64,28 @@ const settings = {
   goal: 'Wait',
   maxTurns: 1,
 };
+it('toggles voice during inference without restarting the agent or making another model call', async () => {
+  let release!: () => void;
+  const s = fakeSession();
+  const decide = vi.fn(async () => {
+    await new Promise<void>((resolve) => (release = resolve));
+    return { type: 'wait' as const };
+  });
+  const m = setup(s, decide),
+    job = m.create(settings);
+  await vi.waitFor(() => expect(decide).toHaveBeenCalledTimes(1));
+  await expect(m.setVoice(job.id, { enabled: 'yes' })).rejects.toThrow();
+  expect((await m.setVoice(job.id, { enabled: true })).voiceReplies).toBe(true);
+  expect((await m.setVoice(job.id, { enabled: false })).voiceReplies).toBe(
+    false,
+  );
+  expect(s.request).toHaveBeenLastCalledWith('agent.voice', { enabled: false });
+  expect(s.join).toHaveBeenCalledTimes(1);
+  expect(s.close).not.toHaveBeenCalled();
+  expect(decide).toHaveBeenCalledTimes(1);
+  release();
+  await vi.waitFor(() => expect(m.list()[0].status).toBe('idle'));
+});
 it('updates saved settings without inference, protects identity, validates inputs and persists', async () => {
   const s = fakeSession(),
     decide = vi.fn(async () => ({ type: 'wait' as const }));
@@ -83,6 +106,7 @@ it('updates saved settings without inference, protects identity, validates input
     intervalMaxMs: 8000,
     maxTokens: 1024,
     allowEdits: true,
+    voiceReplies: true,
     id: 'forged',
     status: 'running',
   });
@@ -93,7 +117,9 @@ it('updates saved settings without inference, protects identity, validates input
     maxTurns: 50,
     maxTokens: 1024,
     allowEdits: true,
+    voiceReplies: true,
   });
+  expect(s.request).toHaveBeenCalledWith('agent.voice', { enabled: true });
   expect(decide).toHaveBeenCalledTimes(1);
   expect(s.join).toHaveBeenCalledTimes(1);
   await m.close();

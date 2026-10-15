@@ -10,6 +10,14 @@ export type ChatData = Omit<ChatRoute, 'scope'> & {
   transcriptAvailable?: boolean;
 };
 export type ChatEntry = WorldEvent & { data: ChatData };
+export type AgentSpeechEvent = {
+  id: string;
+  actor: string;
+  text: string;
+  scope: 'public' | 'private';
+  durationMs: number;
+  expiresAt: number;
+};
 export function parseChatRoute(value: unknown): ChatRoute {
   if (!value || typeof value !== 'object' || Array.isArray(value))
     throw Error('无效消息。');

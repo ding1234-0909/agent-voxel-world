@@ -1,6 +1,7 @@
 import express, { type Express, type ErrorRequestHandler } from 'express';
 import { LocalSpeech, SpeechError, MAX_AUDIO_BYTES } from './local-speech';
 import { createVoiceProvider } from './voice';
+import { LocalTts } from './local-tts';
 export function installSpeechRoutes(app: Express, speech = new LocalSpeech()) {
   const origin = process.env.WEB_ORIGIN ?? 'http://127.0.0.1:5173';
   app.use('/voice', (req, res, next) => {
@@ -28,7 +29,11 @@ export function installSpeechRoutes(app: Express, speech = new LocalSpeech()) {
     } catch {
       /* Optional. */
     }
-    res.json({ local: await speech.status(), ollamaConfigured });
+    res.json({
+      local: await speech.status(),
+      ollamaConfigured,
+      agentSpeech: await new LocalTts().status(),
+    });
   });
   app.post(
     '/voice/transcribe',

@@ -75,6 +75,7 @@ const initialAgent: AgentSettings = {
   timeoutMs: 60000,
   maxTokens: 512,
   allowEdits: false,
+  voiceReplies: true,
   thinking: 'disabled',
   reasoningEffort: 'high',
 };
@@ -879,6 +880,19 @@ export function ControlConsole({
                     />
                     允许放置 / 移除方块
                   </label>
+                  <label className="agent-check">
+                    <input
+                      type="checkbox"
+                      checked={!!agent.voiceReplies}
+                      onChange={(e) =>
+                        setAgent({ ...agent, voiceReplies: e.target.checked })
+                      }
+                    />
+                    语音回复（附近玩家可听见）
+                  </label>
+                  <p className="agent-hint">
+                    使用服务器本机语音合成；私聊仅指定接收者可听，玩家需开启附近语音收听。
+                  </p>
                   <p className="agent-hint">
                     {editingAgent
                       ? '保存后保持当前状态，下次运行使用新参数。'
@@ -968,10 +982,29 @@ export function ControlConsole({
                           : `间隔 ${job.intervalMs} ms`}
                       </span>
                       <span>
-                        {job.allowEdits ? '允许建造' : '仅探索与交流'}
+                        {job.allowEdits ? '允许建造' : '仅探索与交流'} ·{' '}
+                        {job.voiceReplies ? '语音回复开启' : '语音回复关闭'}
                       </span>
                     </div>
                     <div className="agent-card-actions">
+                      <button
+                        disabled={
+                          busy || ['joining', 'stopping'].includes(job.status)
+                        }
+                        aria-pressed={!!job.voiceReplies}
+                        onClick={() =>
+                          void perform(async () => {
+                            await api(
+                              `/${encodeURIComponent(job.id)}/voice`,
+                              'POST',
+                              { enabled: !job.voiceReplies },
+                            );
+                            setJobs(await api<ManagedAgentView[]>(''));
+                          })
+                        }
+                      >
+                        {job.voiceReplies ? '关闭语音回复' : '开启语音回复'}
+                      </button>
                       {!isActive(job) && (
                         <button
                           className="primary"

@@ -21,6 +21,7 @@ export type Player = Vec3 & {
   connected: boolean;
   voiceSending?: boolean;
   voiceListening?: boolean;
+  voiceReplies?: boolean;
 };
 export type WorldPresence = {
   worldId: string;

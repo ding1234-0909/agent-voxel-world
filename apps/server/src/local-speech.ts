@@ -44,7 +44,7 @@ const run: CommandRunner = async (file, args, signal, timeout) => {
     maxBuffer: 512 * 1024,
   });
 };
-async function executable(name: string) {
+export async function executable(name: string) {
   const candidates = name.includes('/')
     ? [name]
     : (process.env.PATH ?? '').split(delimiter).map((dir) => join(dir, name));
@@ -59,7 +59,7 @@ async function executable(name: string) {
   return undefined;
 }
 /** Validate FFmpeg's mono PCM16 output and avoid sending silence to Whisper. */
-export function validatePcmWav(wav: Buffer) {
+export function validatePcmWav(wav: Buffer, maxSeconds = 20.5) {
   if (
     wav.toString('ascii', 0, 4) !== 'RIFF' ||
     wav.toString('ascii', 8, 12) !== 'WAVE'
@@ -85,7 +85,12 @@ export function validatePcmWav(wav: Buffer) {
     throw new SpeechError('音频格式不正确。');
   const seconds = pcm.length / 32000;
   if (seconds < 0.25) throw new SpeechError('录音太短，请至少说一句话。');
-  if (seconds > 20.5) throw new SpeechError('录音超过 20 秒，请分段录音。');
+  if (seconds > maxSeconds)
+    throw new SpeechError(
+      maxSeconds === 20.5
+        ? '录音超过 20 秒，请分段录音。'
+        : '音频过长，请分段发送。',
+    );
   let sum = 0;
   for (let i = 0; i < pcm.length; i += 2)
     sum += (pcm.readInt16LE(i) / 32768) ** 2;

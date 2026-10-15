@@ -189,6 +189,7 @@ export function validateAgent(
       16384,
     ),
     allowEdits: boolean(input.allowEdits, false),
+    voiceReplies: boolean(input.voiceReplies, false),
   };
 }
 export const providerView = ({
@@ -482,6 +483,13 @@ export class AgentManager {
     job.updating = true;
     try {
       const session = job.session;
+      if (session && settings.voiceReplies !== job.view.voiceReplies) {
+        const result = await session.request('agent.voice', {
+          enabled: !!settings.voiceReplies,
+        });
+        if (!result.ok || job.session !== session || active(job.view.status))
+          throw new ManagementError('语音开关未保存，请刷新后重试。', 409);
+      }
       if (session && settings.name !== job.view.name) {
         const result = await session.request('rename', { name: settings.name });
         if (!result.ok || job.session !== session || active(job.view.status))
@@ -500,6 +508,31 @@ export class AgentManager {
         job.attention.clear();
       }
       Object.assign(job.view, settings, { providerName: provider.name });
+      this.persist();
+      await this.saving;
+      return { ...job.view, logs: [...job.view.logs] };
+    } finally {
+      job.updating = false;
+    }
+  }
+  async setVoice(id: string, value: unknown) {
+    const job = this.jobs.get(id);
+    if (!job) throw new ManagementError('Agent 不存在。', 404);
+    if (
+      this.closing ||
+      job.updating ||
+      ['joining', 'stopping'].includes(job.view.status)
+    )
+      throw new ManagementError('Agent 状态正在更新，请稍候。', 409);
+    const enabled = boolean(object(value).enabled, false);
+    job.updating = true;
+    try {
+      if (job.session?.room) {
+        const result = await job.session.request('agent.voice', { enabled });
+        if (!result.ok)
+          throw new ManagementError('语音开关未生效，请重试。', 409);
+      }
+      job.view.voiceReplies = enabled;
       this.persist();
       await this.saving;
       return { ...job.view, logs: [...job.view.logs] };
@@ -544,6 +577,10 @@ export class AgentManager {
             }
           }
         };
+        session.room.onMessage(
+          'agent.speech.error',
+          (value: { message: string }) => log(`语音：${value.message}`),
+        );
         session.room.onLeave(() => {
           if (job.session !== session) return;
           job.session = undefined;
@@ -557,6 +594,10 @@ export class AgentManager {
         });
         log('已加入世界。');
       }
+      const voiceResult = await job.session.request('agent.voice', {
+        enabled: !!job.view.voiceReplies,
+      });
+      if (!voiceResult.ok) log('语音回复开关未生效，请检查服务器版本。');
       if (!job.abort.signal.aborted && run) {
         job.view.status = 'running';
         log('开始新一轮任务。');
