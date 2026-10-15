@@ -21,10 +21,11 @@ export function WorldPanel({
   const { data, status } = presence;
   const players = data?.players ?? [];
   const humans = players.filter(
-    (p) => p.connected && p.kind !== 'scripted-agent',
+    (p) => p.connected && p.kind !== 'scripted-agent' && p.kind !== 'ai-agent',
   ).length;
   const agents = players.filter(
-    (p) => p.connected && p.kind === 'scripted-agent',
+    (p) =>
+      p.connected && (p.kind === 'scripted-agent' || p.kind === 'ai-agent'),
   ).length;
   const reconnecting = players.filter((p) => !p.connected).length;
   const selfId =
@@ -84,14 +85,20 @@ export function WorldPanel({
           <div className={`player ${p.connected ? '' : 'away'}`} key={p.id}>
             <div className="player-name">
               <span aria-hidden="true">
-                {p.kind === 'scripted-agent' ? '◆' : '●'}
+                {p.kind === 'scripted-agent' || p.kind === 'ai-agent'
+                  ? '◆'
+                  : '●'}
               </span>
               {p.name}
               {p.id === selfId ? ' · 你' : ''}
             </div>
             <small>
-              {p.kind === 'scripted-agent' ? '脚本代理' : '玩家'} ·{' '}
-              {p.connected ? '在线' : '重连中'}
+              {p.kind === 'ai-agent'
+                ? 'AI 代理'
+                : p.kind === 'scripted-agent'
+                  ? '脚本代理'
+                  : '玩家'}{' '}
+              · {p.connected ? '在线' : '重连中'}
             </small>
             <small className="player-position">
               位置 {p.x.toFixed(1)}, {p.y.toFixed(1)}, {p.z.toFixed(1)}

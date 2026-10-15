@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc --noEmit",
-    "start": "tsx src/index.ts"
+    "start": "tsx src/index.ts",
+    "test:agent:deepseek": "tsx src/deepseek-integration.ts"
   },
   "dependencies": {
     "@voxel/shared": "workspace:*",

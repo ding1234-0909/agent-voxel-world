@@ -1,6 +1,6 @@
 # 协议与扩展边界
 
-客户端先 GET `/world` 获取唯一 `roomId`，再用 Colyseus JS 0.16 `joinById(roomId, {name, kind})` 入房。`kind: scripted-agent` 只用于显示测试身份，不授予权限。这个原型不提供身份认证；只监听本机。
+客户端先 GET `/world` 获取唯一 `roomId`，再用 Colyseus JS 0.16 `joinById(roomId, {name, kind})` 入房。`kind: scripted-agent` 和 `kind: ai-agent` 分别显示脚本代理和 AI 代理身份，不授予额外权限。其他值按 human 处理。这个原型不提供身份认证；只监听本机。
 
 ## 大厅实时玩家
 

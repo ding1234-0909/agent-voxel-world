@@ -18,7 +18,9 @@
     "agent": "pnpm --filter @voxel/agent start",
     "test:integration": "pnpm --filter @voxel/agent test:integration",
     "format": "prettier --write apps packages scripts tests README.md docs package.json tsconfig.json pnpm-workspace.yaml",
-    "format:check": "prettier --check apps packages scripts tests README.md docs package.json tsconfig.json pnpm-workspace.yaml"
+    "format:check": "prettier --check apps packages scripts tests README.md docs package.json tsconfig.json pnpm-workspace.yaml",
+    "agent:deepseek": "pnpm --filter @voxel/agent deepseek",
+    "test:agent:deepseek": "pnpm --filter @voxel/server test:agent:deepseek"
   },
   "devDependencies": {
     "@types/node": "^22.18.0",

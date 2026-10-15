@@ -190,7 +190,10 @@ export class WorldScene {
         const body = new THREE.Mesh(
           new THREE.BoxGeometry(0.6, 1, 0.4),
           new THREE.MeshStandardMaterial({
-            color: p.kind === 'scripted-agent' ? 0xefac56 : 0x527da2,
+            color:
+              p.kind === 'scripted-agent' || p.kind === 'ai-agent'
+                ? 0xefac56
+                : 0x527da2,
           }),
         );
         body.position.y = 0.7;

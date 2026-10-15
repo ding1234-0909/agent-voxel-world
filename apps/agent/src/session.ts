@@ -34,6 +34,8 @@ export class Session {
   events: WorldEvent[] = [];
   voice: unknown[] = [];
   private id = 0;
+  private roomOpen = false;
+  private closing?: Promise<void>;
   private pending = new Map<string, (value: any) => void>();
   async join(name: string, kind = 'scripted-agent') {
     const endpoint = (process.env.SERVER_URL ?? 'ws://127.0.0.1:2567').replace(
@@ -49,6 +51,11 @@ export class Session {
   }
   attach(room: Room) {
     this.room = room;
+    this.roomOpen = true;
+    this.closing = undefined;
+    room.onLeave(() => {
+      if (this.room === room) this.roomOpen = false;
+    });
     room.onMessage('snapshot', (s: Snapshot) => (this.snapshot = s));
     room.onMessage('edit', (e: Edit) => this.edits.push(e));
     room.onMessage('event', (e: WorldEvent) => this.events.push(e));
@@ -92,6 +99,24 @@ export class Session {
     await delay(100);
   }
   async close() {
-    await this.room?.leave();
+    if (this.closing) return this.closing;
+    if (!this.roomOpen) return;
+    const room = this.room;
+    this.closing = (async () => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          room.leave(true),
+          new Promise<void>((resolve) => {
+            timer = setTimeout(resolve, 1500);
+          }),
+        ]);
+      } finally {
+        clearTimeout(timer);
+        room.connection.close();
+        this.roomOpen = false;
+      }
+    })();
+    return this.closing;
   }
 }

@@ -222,7 +222,12 @@ export class WorldRoom extends Room<WorldState> {
     p.id = client.sessionId;
     p.name =
       typeof options.name === 'string' ? options.name.slice(0, 24) : 'Explorer';
-    p.kind = options.kind === 'scripted-agent' ? 'scripted-agent' : 'human';
+    p.kind =
+      options.kind === 'ai-agent'
+        ? 'ai-agent'
+        : options.kind === 'scripted-agent'
+          ? 'scripted-agent'
+          : 'human';
     const slot = this.state.players.size;
     p.x = (slot % 3) - 1;
     p.z = (Math.floor(slot / 3) % 3) - 1;

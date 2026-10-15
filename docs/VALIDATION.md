@@ -60,3 +60,11 @@
 - 真实本机 SDK + SSE：临时脚本代理加入、身份区分、移动位置变化、异常 socket 断线的 connected=false、原令牌恢复、主动退出后从名单删除均通过。大厅订阅不增加玩家名额，测试结束移除临时会话。
 - 更新服务前将内存世界备份至忽略目录 `.data/world-before-presence.json`，开发服务启动日志确认恢复版本 26、2089 个方块。随后其他会话继续编辑至版本 87；最初对旧备份的固定版本相等断言因此失效，改为验证当前版本不倒退并重新通过。没有把旧备份再次覆盖到版本 87 上。此恢复是本次开发的一次性操作，不代表 memory 模式已实现持久化。
 - 本次未重跑 PostgreSQL 集成测试、真实麦克风测试或 16 人负载测试。
+
+## 2026-10-15：DeepSeek AI 玩家与 OpenAI SDK
+
+- 安装 OpenAI 官方 Node SDK 7.34.0，仅用于 Agent 进程。DeepSeek 请求使用官方 baseURL、`deepseek-flash`、JSON 输出、非流式返回；思考开关和推理强度支持环境配置。
+- `pnpm check`：11 个文件、74 项测试、类型检查和全部构建通过；`pnpm format:check`、`git diff --check` 通过。新增 23 项测试覆盖 SDK 实际请求格式、enabled/high 参数、输入校验、权限、超时取消、错误脱敏、轮数上限和失败停止。
+- `pnpm test:agent:deepseek` 通过：在自动分配端口的独立内存世界中，通过真实 OpenAI SDK（HTTP 响应替身）及真实 Colyseus 连接验证 AI 身份、观察、移动、聊天、版本校验编辑及重复关闭清理。该测试关闭自身服务，不修改当前 2577 世界。
+- Colyseus 的 PM2 指标模块在 Vitest fork 的 IPC 通道内导致进程冲突，因此完整世界验证使用独立 tsx 进程运行；没有忽略未处理错误。
+- 没有真实 Key 的 DeepSeek 云调用验证，也没有模型自主规划质量验证。当前开发世界没有重启；旧进程会在 Agent 发起模型调用之前被身份检查识别，并提示加载新版服务。

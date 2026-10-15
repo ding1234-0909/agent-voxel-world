@@ -5,10 +5,12 @@
   "scripts": {
     "start": "tsx src/demo.ts",
     "test:integration": "tsx src/integration.ts",
-    "build": "tsc --noEmit"
+    "build": "tsc --noEmit",
+    "deepseek": "tsx src/deepseek-main.ts"
   },
   "dependencies": {
     "@voxel/shared": "workspace:*",
-    "colyseus.js": "^0.16.19"
+    "colyseus.js": "^0.16.19",
+    "openai": "^7.34.0"
   }
 }

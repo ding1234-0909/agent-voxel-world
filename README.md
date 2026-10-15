@@ -47,12 +47,13 @@ pnpm format:check
 - `apps/server`：Colyseus 单一权威世界、事务存储、语音 provider 接口。
 - `apps/server/prisma`：PostgreSQL schema 和可重放迁移。
 - `apps/agent`：显式标注的脚本测试 Agent、结构化 SDK、集成检查。
+- DeepSeek AI 玩家：配置 `DEEPSEEK_API_KEY` 后运行 `pnpm agent:deepseek`，支持观察、移动、聊天和显式开启的方块编辑。使用 OpenAI 官方 SDK，支持 DeepSeek 思考模式；启动端口与配置见 [Agent 接入](docs/AGENT_PLAYERS.md)。
 - `packages/shared`：协议、确定性地形、物理与校验。
 
 ## 范围和限制
 
 这是本地单进程、单世界、最多 16 会话的原型，不是完整 Minecraft。地形 25×25、高度上限 15；没有背包、合成、战斗、账户鉴权、反作弊运营、多人分片或生产部署。方块编辑持久化，玩家位置、聊天、事件和语音会话暂不持久化。事件环形缓存保留最近 100 条，观察返回最近 30 条公共事件。
 
-Agent 观察是以自身为中心半径 8 的距离裁剪，最多 500 个最近方块，不做遮挡/视锥裁剪；这是结构化场景接口，并非模型视觉。Agent 与人类共用同一移动和编辑校验。脚本 Agent 没有 LLM，也没有秘密的管理动作。协议见 [接口文档](docs/PROTOCOL.md)。
+Agent 观察是以自身为中心半径 8 的距离裁剪，最多 500 个最近方块，不做遮挡/视锥裁剪；这是结构化场景接口，并非模型视觉。Agent 与人类共用同一移动和编辑校验。Scout 脚本 Agent 没有 LLM；DeepSeek AI 玩家由模型决策，两者都没有额外管理权限。协议见 [接口文档](docs/PROTOCOL.md)。
 
 语音方案已支持 `mock`、`browser` 和 `ollama`。回声不是 AI；Ollama 需预先安装并配置。语音识别默认由本机 Whisper 处理，浏览器在线识别可选，朗读是否联网取决于浏览器语音。尚未接入 Google Vertex 或其他付费云端音频模型。未来凭据必须放服务端环境，不能放 `VITE_*`。
