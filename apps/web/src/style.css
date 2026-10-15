@@ -515,3 +515,130 @@ footer {
   outline: 2px solid #304c40;
   outline-offset: 3px;
 }
+
+.world-panel {
+  max-height: calc(100vh - 260px);
+  overflow-y: auto;
+}
+.world-panel h1 {
+  font-family: inherit;
+  font-size: 28px;
+  font-weight: 500;
+  margin: 18px 0 14px;
+}
+.presence-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10px;
+  color: #6d7e74;
+}
+.presence-status i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #b6874e;
+}
+.presence-status.live i {
+  background: #3c7960;
+}
+.world-panel .presence-notice {
+  font-size: 10px;
+  color: #916a38;
+}
+.world-panel .stats {
+  justify-content: space-between;
+  gap: 12px;
+  margin: 22px 0 8px;
+}
+.world-panel .stats small {
+  font-size: 10px;
+}
+.world-panel .world-occupancy {
+  margin: 0 0 20px;
+  font-size: 10px;
+}
+.player-list {
+  max-height: 230px;
+  overflow-y: auto;
+}
+.player-name {
+  overflow-wrap: anywhere;
+}
+.player.away span {
+  color: #b6874e;
+}
+.player .player-position {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  font-size: 9px;
+}
+.world-membership {
+  margin-top: 20px;
+  padding-top: 14px;
+  border-top: 1px solid #dfe4d8;
+  color: #537064;
+  font-size: 10px;
+  line-height: 1.6;
+}
+.world-panel .storage {
+  margin-top: 10px;
+}
+
+.game-panels {
+  display: flex;
+  gap: 8px;
+  pointer-events: auto;
+}
+.game-panels button {
+  padding: 9px 13px;
+  border: 1px solid #6c8e7d;
+  border-radius: 5px;
+  background: #f6f7ee;
+  color: #304c40;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.game-panels button[aria-expanded='true'] {
+  background: #304c40;
+  color: #fff;
+}
+.game-panels button:focus-visible,
+.panel-close:focus-visible {
+  outline: 2px solid #304c40;
+  outline-offset: 3px;
+}
+.panel-close,
+.voice .panel-close {
+  display: block;
+  margin: 0 0 14px auto;
+  padding: 5px 8px;
+  background: #dce7d5;
+  border-radius: 4px;
+  color: #304c40;
+  font-size: 11px;
+}
+.world-panel[hidden],
+.communication .voice[hidden] {
+  display: none;
+}
+.in-game .communication .chat {
+  margin-top: auto;
+}
+@media (max-width: 900px) {
+  .in-game header .brand small,
+  .in-game header .status > span {
+    display: none;
+  }
+  .in-game .status {
+    gap: 6px;
+  }
+  .game-panels {
+    gap: 5px;
+  }
+  .game-panels button,
+  .in-game .exit-game {
+    padding: 8px;
+    margin-left: 0;
+  }
+}

@@ -13,6 +13,15 @@ export type Player = Vec3 & {
   yaw: number;
   connected: boolean;
 };
+export type WorldPresence = {
+  worldId: string;
+  roomId: string;
+  revision: number;
+  capacity: number;
+  persistence: string;
+  updatedAt: number;
+  players: Player[];
+};
 export type Input = { x: number; z: number; jump: boolean; yaw: number };
 export type Edit = Vec3 & { material: Material | null; revision: number };
 export type Snapshot = {

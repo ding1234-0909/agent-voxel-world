@@ -2,6 +2,14 @@
 
 客户端先 GET `/world` 获取唯一 `roomId`，再用 Colyseus JS 0.16 `joinById(roomId, {name, kind})` 入房。`kind: scripted-agent` 只用于显示测试身份，不授予权限。这个原型不提供身份认证；只监听本机。
 
+## 大厅实时玩家
+
+GET `/world/presence` 是独立的只读 SSE 订阅，连接后立即发送完整状态，之后每秒推送一次。查看大厅不创建 Avatar、不占用房间名额，退出游戏后订阅继续保留。
+
+每条 `data` 包含 `worldId`、`roomId`、`revision`、`capacity`、`persistence`、`updatedAt` 和 `players`。玩家字段包括 id、昵称、角色、位置、朝向和 connected；不包含重连令牌。在线人数只统计 connected=true，真人和脚本代理分别计数；重连保留期的玩家仍列出并标为“重连中”，不计入在线人数。
+
+跨域访问仅允许配置的 `WEB_ORIGIN`。世界尚未就绪返回 503。客户端断线或 5 秒没有心跳时标记旧数据，2 秒后重新订阅；没有成功获取数据时显示未知，而非 0。组件卸载关闭订阅和定时器。
+
 ## 白名单动作
 
 发送房间消息 `action`：`{id: string, type: string, payload: object}`。id 最多 80 字符。未知动作返回 `result` 的 `unknown-action`，无效输入返回具体错误。每会话每秒最多 45 条动作/同步请求，WebSocket 单消息上限 16KB。

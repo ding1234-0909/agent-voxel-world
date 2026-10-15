@@ -7,6 +7,7 @@ import { Server, matchMaker } from '@colyseus/core';
 import { WebSocketTransport } from '@colyseus/ws-transport';
 import { WorldRoom } from './room';
 import { installSpeechRoutes } from './speech-routes';
+import { installPresenceRoutes } from './presence-routes';
 const app = express();
 app.use((req, res, next) => {
   if (
@@ -39,4 +40,9 @@ const port = Number(process.env.PORT ?? 2567);
 await server.listen(port, '127.0.0.1');
 const world = await matchMaker.createRoom('world', {});
 app.get('/world', (_req, res) => res.json({ roomId: world.roomId }));
+installPresenceRoutes(app, () =>
+  (
+    matchMaker.getLocalRoomById(world.roomId) as WorldRoom | undefined
+  )?.getPresence(),
+);
 console.log(`Voxel server http://127.0.0.1:${port}`);

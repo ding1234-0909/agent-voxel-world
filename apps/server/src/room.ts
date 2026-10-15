@@ -9,6 +9,8 @@ import {
   validateEdit,
   parseInput,
   distance,
+  WORLD_ID,
+  type WorldPresence,
   type Block,
   type Input,
   type Edit,
@@ -269,6 +271,26 @@ export class WorldRoom extends Room<WorldState> {
     await this.queue;
     await this.store.close();
     if (this.ownsActive) activeRoom = false;
+  }
+  getPresence(): WorldPresence {
+    return {
+      worldId: WORLD_ID,
+      roomId: this.roomId,
+      revision: this.state.revision,
+      capacity: this.maxClients,
+      persistence: this.store.mode,
+      updatedAt: Date.now(),
+      players: [...this.state.players.values()].map((p) => ({
+        id: p.id,
+        name: p.name,
+        kind: p.kind,
+        x: p.x,
+        y: p.y,
+        z: p.z,
+        yaw: p.yaw,
+        connected: p.connected,
+      })),
+    };
   }
   private snapshot(client: Client) {
     client.send('snapshot', {

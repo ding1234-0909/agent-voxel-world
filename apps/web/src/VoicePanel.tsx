@@ -16,9 +16,15 @@ type VoiceEvent = {
 export function VoicePanel({
   connection,
   onJoin,
+  hidden = false,
+  onClose,
+  onActivityChange,
 }: {
   connection: Connection;
   onJoin: () => Promise<boolean>;
+  hidden?: boolean;
+  onClose?: () => void;
+  onActivityChange?: (state: string) => void;
 }) {
   const [speech] = useState(() => new BrowserSpeech());
   const [recorder] = useState(() => new LocalRecorder());
@@ -56,6 +62,9 @@ export function VoicePanel({
     subtitle: '选择方案，输入文字或点击麦克风开始。',
   });
   const request = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    onActivityChange?.(voice.state);
+  }, [voice.state, onActivityChange]);
   const operation = useRef(0);
   const joining = useRef(false);
   const connected = connection.status === 'connected';
@@ -166,7 +175,21 @@ export function VoicePanel({
       ? localReady && recorder.canRecord
       : speech.canListen;
   return (
-    <section className="voice" aria-label="语音实验室">
+    <section
+      id="voice-panel"
+      className="voice"
+      aria-label="语音实验室"
+      hidden={hidden}
+    >
+      {onClose && (
+        <button
+          className="panel-close"
+          aria-label="收起语音面板"
+          onClick={onClose}
+        >
+          收起 ×
+        </button>
+      )}
       <div className="eyebrow">VOICE LAB · 无需云账号</div>
       <label className="voice-label">
         接入方案

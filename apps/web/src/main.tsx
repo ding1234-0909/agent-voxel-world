@@ -4,6 +4,7 @@ import { type Material } from '@voxel/shared';
 import { Connection } from './connection';
 import { WorldScene } from './scene';
 import { VoicePanel } from './VoicePanel';
+import { WorldPanel } from './WorldPanel';
 import './style.css';
 const connection = new Connection();
 if (import.meta.hot) import.meta.hot.dispose(() => connection.dispose());
@@ -12,6 +13,10 @@ function App() {
   const host = useRef<HTMLDivElement>(null),
     scene = useRef<WorldScene | null>(null);
   const [, render] = useState(0);
+  const [activePanel, setActivePanel] = useState<'players' | 'voice' | null>(
+    null,
+  );
+  const [voiceActivity, setVoiceActivity] = useState('idle');
   const [name, setName] = useState(savedName ?? 'Explorer'),
     [joined, setJoined] = useState(!!savedName),
     [chat, setChat] = useState(''),
@@ -26,10 +31,19 @@ function App() {
     if (savedName) void connection.connect(savedName);
     return () => world.dispose();
   }, []);
+  useEffect(() => {
+    if (!joined) return;
+    const closePanels = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setActivePanel(null);
+    };
+    window.addEventListener('keydown', closePanels);
+    return () => window.removeEventListener('keydown', closePanels);
+  }, [joined]);
   const joinWorld = async () => {
     if (connection.status === 'connected') return true;
     const explorerName = name.trim() || 'Explorer';
     setName(explorerName);
+    setActivePanel(null);
     setJoined(true);
     sessionStorage.setItem('voxel-name', explorerName);
     await connection.connect(explorerName);
@@ -39,10 +53,11 @@ function App() {
     scene.current?.leaveWorld();
     connection.leave();
     setJoined(false);
+    setActivePanel(null);
     setChat('');
   };
   return (
-    <main>
+    <main className={joined ? 'in-game' : 'in-lobby'}>
       <div className="world" ref={host} />
       <header>
         <div className="brand">
@@ -56,6 +71,36 @@ function App() {
           <i className={connection.status === 'connected' ? 'online' : ''} />
           {connection.status} <span>WORLD 01</span>
           {joined && (
+            <nav className="game-panels" aria-label="游戏面板">
+              <button
+                aria-expanded={activePanel === 'players'}
+                aria-controls="world-panel"
+                onClick={() =>
+                  setActivePanel(activePanel === 'players' ? null : 'players')
+                }
+              >
+                玩家
+              </button>
+              <button
+                aria-expanded={activePanel === 'voice'}
+                aria-controls="voice-panel"
+                onClick={() =>
+                  setActivePanel(activePanel === 'voice' ? null : 'voice')
+                }
+              >
+                语音
+                {(
+                  {
+                    listening: ' · 录音中',
+                    transcribing: ' · 识别中',
+                    thinking: ' · 回复中',
+                    speaking: ' · 朗读中',
+                  } as Record<string, string>
+                )[voiceActivity] ?? ''}
+              </button>
+            </nav>
+          )}
+          {joined && (
             <button
               className="exit-game"
               onClick={leaveWorld}
@@ -66,46 +111,11 @@ function App() {
           )}
         </div>
       </header>
-      <aside className="panel">
-        <div className="eyebrow">THE MEADOW</div>
-        <h1>
-          Make room
-          <br />
-          for possibility.
-        </h1>
-        <p>
-          A small, persistent world.
-          <br />
-          Build something together.
-        </p>
-        <div className="stats">
-          <div>
-            <strong>{connection.players.length}</strong>
-            <small>EXPLORERS</small>
-          </div>
-          <div>
-            <strong>{connection.revision}</strong>
-            <small>WORLD REVISION</small>
-          </div>
-        </div>
-        <div className="rule" />
-        <div className="eyebrow">IN THIS WORLD</div>
-        {connection.players.map((p) => (
-          <div className="player" key={p.id}>
-            <span>{p.kind === 'scripted-agent' ? '◆' : '●'}</span>
-            {p.name}
-            {p.id === connection.room?.sessionId ? ' · you' : ''}
-            <small>
-              {p.kind === 'scripted-agent'
-                ? 'SCRIPTED TEST AGENT'
-                : p.connected
-                  ? 'ONLINE'
-                  : 'RECONNECTING'}
-            </small>
-          </div>
-        ))}
-        <div className="storage">Storage · {connection.persistence}</div>
-      </aside>
+      <WorldPanel
+        connection={connection}
+        hidden={joined && activePanel !== 'players'}
+        onClose={joined ? () => setActivePanel(null) : undefined}
+      />
       {!joined && (
         <div className="join">
           <div className="eyebrow">STEP INTO THE WORLD</div>
@@ -136,7 +146,13 @@ function App() {
         </>
       )}
       <div className="communication">
-        <VoicePanel connection={connection} onJoin={joinWorld} />
+        <VoicePanel
+          connection={connection}
+          onJoin={joinWorld}
+          hidden={joined && activePanel !== 'voice'}
+          onClose={joined ? () => setActivePanel(null) : undefined}
+          onActivityChange={setVoiceActivity}
+        />
         <section className="chat">
           <div className="eyebrow">WORLD CHAT</div>
           <div className="messages">
