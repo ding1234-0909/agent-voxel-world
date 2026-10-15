@@ -1,0 +1,21 @@
+generator client {
+ provider = "prisma-client-js"
+}
+datasource db {
+ provider = "postgresql"
+ url = env("DATABASE_URL")
+}
+model World {
+ id String @id
+ revision Int @default(0)
+ edits BlockEdit[]
+}
+model BlockEdit {
+ worldId String
+ x Int
+ y Int
+ z Int
+ material String?
+ world World @relation(fields:[worldId], references:[id], onDelete: Cascade)
+ @@id([worldId,x,y,z])
+}

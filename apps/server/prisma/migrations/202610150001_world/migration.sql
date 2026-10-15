@@ -1,0 +1,2 @@
+CREATE TABLE "World" ("id" TEXT PRIMARY KEY, "revision" INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE "BlockEdit" ("worldId" TEXT NOT NULL, "x" INTEGER NOT NULL, "y" INTEGER NOT NULL, "z" INTEGER NOT NULL, "material" TEXT, PRIMARY KEY ("worldId", "x", "y", "z"), CONSTRAINT "BlockEdit_worldId_fkey" FOREIGN KEY ("worldId") REFERENCES "World"("id") ON DELETE CASCADE ON UPDATE CASCADE);

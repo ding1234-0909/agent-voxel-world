@@ -9,7 +9,11 @@
     "build": "pnpm -r build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "check": "pnpm typecheck && pnpm test && pnpm build"
+    "check": "pnpm typecheck && pnpm test && pnpm build",
+    "db:start": "node scripts/database.mjs",
+    "db:stop": "node scripts/database.mjs stop",
+    "db:generate": "pnpm --filter @voxel/server exec prisma generate",
+    "db:migrate": "pnpm --filter @voxel/server exec dotenv -e ../../.env -- prisma migrate deploy"
   },
   "devDependencies": {
     "typescript": "~5.9.3",

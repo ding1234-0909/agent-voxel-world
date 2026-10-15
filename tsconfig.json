@@ -12,7 +12,8 @@
     "noEmit": true,
     "types": [
       "node"
-    ]
+    ],
+    "useDefineForClassFields": false
   },
   "include": [
     "apps",

@@ -7,3 +7,6 @@ dist/
 artifacts/
 *.log
 .DS_Store
+.playwright-cli/
+output/
+.vscode/

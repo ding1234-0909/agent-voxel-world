@@ -1,3 +1,4 @@
+import { WorldStore } from './store';
 import { Room, Client } from '@colyseus/core';
 import { Schema, MapSchema, defineTypes } from '@colyseus/schema';
 import { terrain, key, simulate, validateEdit, parseInput, distance, type Block, type Input, type Edit, type WorldEvent } from '@voxel/shared';
@@ -8,8 +9,10 @@ defineTypes(Avatar,{id:'string',name:'string',kind:'string',x:'number',y:'number
 class WorldState extends Schema { players=new MapSchema<Avatar>(); revision=0; }
 defineTypes(WorldState,{players:{map:Avatar},revision:'number'});
 const zero:Input={x:0,z:0,jump:false,yaw:0};
+let activeRoom=false;
 export class WorldRoom extends Room<WorldState> {
  blocks=terrain();
+ store=new WorldStore();
  private bodies=new Map<string,{vy:number;grounded:boolean;input:Input;lastInput:number}>();
  private budget=new Map<string,{at:number;count:number}>();
  private events:WorldEvent[]=[];
@@ -17,8 +20,10 @@ export class WorldRoom extends Room<WorldState> {
  private queue:Promise<void>=Promise.resolve();
  autoDispose=false;
  maxClients=16;
- onCreate() {
-  this.setState(new WorldState()); this.setPatchRate(50);
+ async onCreate() {
+  if(activeRoom) throw new Error("Single world is full; join the existing room");
+  activeRoom=true;
+  this.setState(new WorldState()); try {this.state.revision=await this.store.load(this.blocks);}catch(error){activeRoom=false;throw error;} this.setPatchRate(50);
   this.onMessage('sync',(client)=>this.snapshot(client));
   this.onMessage('action',(client,value)=>{
    if(!this.allow(client)) return;
@@ -42,6 +47,7 @@ export class WorldRoom extends Room<WorldState> {
      const error=validateEdit(payload as Edit,this.state.players.get(client.sessionId)!,[...this.state.players.values()],this.blocks,this.state.revision);
      if(error) { this.reply(client,id,false,error); if(error==='conflict') this.snapshot(client); return; }
      const edit=payload as Edit;
+     await this.store.save(edit);
      if(edit.material===null) this.blocks.delete(key(edit)); else this.blocks.set(key(edit),{x:edit.x,y:edit.y,z:edit.z,material:edit.material});
      this.state.revision++; this.broadcast('edit',{...edit,revision:this.state.revision}); this.event('block-edited',client.sessionId,edit); this.reply(client,id,true);
     }).catch((error)=>{console.error('edit failed',error);this.reply(client,id,false,'storage-unavailable');});
@@ -73,7 +79,8 @@ export class WorldRoom extends Room<WorldState> {
   if(!consented) { try { const reconnected=await this.allowReconnection(client,20);if(p)p.connected=true;this.snapshot(reconnected);this.event('reconnected',client.sessionId,{});return; } catch {} }
   this.state.players.delete(client.sessionId);this.bodies.delete(client.sessionId);this.budget.delete(client.sessionId);this.event('left',client.sessionId,{});
  }
- private snapshot(client:Client) {client.send('snapshot',{blocks:[...this.blocks.values()],revision:this.state.revision,persistence:'memory'});}
+ async onDispose(){await this.queue;await this.store.close();activeRoom=false;}
+ private snapshot(client:Client) {client.send('snapshot',{blocks:[...this.blocks.values()],revision:this.state.revision,persistence:this.store.mode});}
  private reply(client:Client,id:string,ok:boolean,error?:string) {client.send('result',{id,ok,error,revision:this.state.revision});}
  private allow(client:Client) {
   const now=Date.now(),b=this.budget.get(client.sessionId)??{at:now,count:0};if(now-b.at>1000){b.at=now;b.count=0;}b.count++;this.budget.set(client.sessionId,b);

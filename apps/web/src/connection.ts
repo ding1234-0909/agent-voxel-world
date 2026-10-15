@@ -9,7 +9,7 @@ export class Connection {
   const client=new Client(import.meta.env.VITE_SERVER_URL??'ws://127.0.0.1:2567');
   try {
    const token=sessionStorage.getItem('voxel-reconnect');let room:Room;
-   try {if(!token)throw Error('new');room=await client.reconnect(token);}catch {room=await client.joinOrCreate('world',{name});}
+   try {if(!token)throw Error('new');room=await client.reconnect(token);}catch {const endpoint=(import.meta.env.VITE_SERVER_URL??'ws://127.0.0.1:2567').replace(/^ws/,'http');const info=await fetch(`${endpoint}/world`).then(r=>r.json());room=await client.joinById(info.roomId,{name});}
    this.room=room;sessionStorage.setItem('voxel-reconnect',room.reconnectionToken);
    room.onMessage('snapshot',(s:Snapshot)=>{this.blocks=new Map(s.blocks.map(b=>[key(b),b]));this.revision=s.revision;this.persistence=s.persistence;this.onBlocks();this.onChange();});
    room.onMessage('edit',(e:Edit)=>{if(e.revision!==this.revision+1){room.send('sync');return;}if(e.material===null)this.blocks.delete(key(e));else this.blocks.set(key(e),{x:e.x,y:e.y,z:e.z,material:e.material});this.revision=e.revision;this.onBlocks();this.onChange();});
