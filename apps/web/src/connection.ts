@@ -6,6 +6,7 @@ import {
   type Snapshot,
   type Edit,
   type WorldEvent,
+  type ChatEntry,
 } from '@voxel/shared';
 export class Connection {
   room?: Room;
@@ -15,6 +16,49 @@ export class Connection {
   status = 'lobby';
   persistence = 'memory';
   messages: string[] = [];
+  chats: ChatEntry[] = [];
+  chatToken = '';
+  private recording = false;
+  get chatRecording() {
+    return this.recording;
+  }
+  set chatRecording(value: boolean) {
+    if (value !== this.recording) {
+      this.recording = value;
+      this.onChange();
+    }
+  }
+  voiceLabRecording = false;
+  stopSpatialInput = () => {};
+  onSpatialSignal: (value: any) => void = () => {};
+  private replies = new Map<
+    string,
+    {
+      resolve: () => void;
+      reject: (e: Error) => void;
+      timer: ReturnType<typeof setTimeout>;
+    }
+  >();
+  async requestAction(type: string, payload: unknown) {
+    if (this.status !== 'connected') throw Error('尚未连接世界。');
+    const id = this.action(type, payload)!;
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.replies.delete(id);
+        reject(Error('发送超时，请检查连接。'));
+      }, 8000);
+      this.replies.set(id, { resolve, reject, timer });
+    });
+  }
+  private clearCommunication() {
+    this.chatToken = '';
+    this.stopSpatialInput();
+    for (const reply of this.replies.values()) {
+      clearTimeout(reply.timer);
+      reply.reject(Error('游戏连接已断开。'));
+    }
+    this.replies.clear();
+  }
   onChange = () => {};
   onBlocks = () => {};
   onVoice = (value: unknown) => {};
@@ -94,21 +138,41 @@ export class Connection {
         this.onBlocks();
         this.onChange();
       });
+      room.onMessage('chat.auth', (value: { token: string }) => {
+        if (activeRoom()) {
+          this.chatToken = value.token;
+          this.onChange();
+        }
+      });
+      room.onMessage('spatial.signal', (value) => {
+        if (activeRoom()) this.onSpatialSignal(value);
+      });
       room.onMessage('event', (e: WorldEvent) => {
         if (!activeRoom()) return;
         if (e.type === 'chat') {
+          this.chats = [...this.chats, e as ChatEntry].slice(-50);
           const d = e.data as { name: string; text: string };
           this.messages = [...this.messages, `${d.name}: ${d.text}`].slice(-30);
           this.onChange();
         }
       });
-      room.onMessage('result', (r: { ok: boolean; error?: string }) => {
-        if (!activeRoom()) return;
-        if (!r.ok && r.error !== 'voice-provider-unavailable') {
-          this.messages = [...this.messages, `⚠ ${r.error}`].slice(-30);
-          this.onChange();
-        }
-      });
+      room.onMessage(
+        'result',
+        (r: { id?: string; ok: boolean; error?: string }) => {
+          if (!activeRoom()) return;
+          const reply = r.id ? this.replies.get(r.id) : undefined;
+          if (reply) {
+            clearTimeout(reply.timer);
+            this.replies.delete(r.id!);
+            if (r.ok) reply.resolve();
+            else reply.reject(Error(r.error || '发送失败。'));
+          }
+          if (!r.ok && r.error !== 'voice-provider-unavailable') {
+            this.messages = [...this.messages, `⚠ ${r.error}`].slice(-30);
+            this.onChange();
+          }
+        },
+      );
       room.onMessage('voice', (value) => {
         if (activeRoom()) this.onVoice(value);
       });
@@ -122,6 +186,7 @@ export class Connection {
       });
       room.onLeave(() => {
         if (!activeRoom()) return;
+        this.clearCommunication();
         this.room = undefined;
         this.status = 'disconnected';
         this.onVoice({
@@ -169,6 +234,8 @@ export class Connection {
     this.status = 'lobby';
     this.players = [];
     this.messages = [];
+    this.chats = [];
+    this.clearCommunication();
     sessionStorage.removeItem('voxel-reconnect');
     sessionStorage.removeItem('voxel-name');
     this.onVoice({
@@ -179,6 +246,7 @@ export class Connection {
     if (room) void room.leave(true).catch(() => room.connection.close());
   }
   dispose() {
+    this.clearCommunication();
     this.stopped = true;
     this.generation++;
     clearTimeout(this.retry);

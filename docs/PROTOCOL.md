@@ -12,16 +12,16 @@ GET `/world/presence` 是独立的只读 SSE 订阅，连接后立即发送完�
 
 ## 白名单动作
 
-发送房间消息 `action`：`{id: string, type: string, payload: object}`。id 最多 80 字符。未知动作返回 `result` 的 `unknown-action`，无效输入返回具体错误。每会话每秒最多 45 条动作/同步请求，WebSocket 单消息上限 16KB。
+发送房间消息 `action`：`{id: string, type: string, payload: object}`。id 最多 80 字符。未知动作返回 `result` 的 `unknown-action`，无效输入返回具体错误。每会话每秒最多 45 条普通动作/同步请求；空间语音信令另有每秒 120 条限额，WebSocket 单消息上限 16KB。
 
-| type            | payload                          | 结果                                                                  |
-| --------------- | -------------------------------- | --------------------------------------------------------------------- |
-| move            | `{x,z,jump,yaw}`，方向分量 -1..1 | 20Hz 权威模拟；没有每帧确认，读取 state；250ms 无输入自动停下         |
-| edit            | `{x,y,z,material,revision}`      | material 为 grass/dirt/stone/wood 或 null；result 与 edit 广播        |
-| chat            | `{text}`，1..240 字符            | result 和公共 event                                                   |
-| observe         | `{}`                             | observation，含 self、附近玩家/方块、revision、events、allowedActions |
-| voice.start     | `{text,provider?}`，1..240 字符  | result 与仅本会话 voice 事件；可选 mock / browser / ollama            |
-| voice.interrupt | `{}`                             | result 与 interrupted 事件                                            |
+| type            | payload                                                           | 结果                                                                  |
+| --------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------- |
+| move            | `{x,z,jump,yaw}`，方向分量 -1..1                                  | 20Hz 权威模拟；没有每帧确认，读取 state；250ms 无输入自动停下         |
+| edit            | `{x,y,z,material,revision}`                                       | material 为 grass/dirt/stone/wood 或 null；result 与 edit 广播        |
+| chat            | `{text,scope?,recipients?}`，1..240 字符；scope 为 public/private | result 和按接收范围过滤的 event                                       |
+| observe         | `{}`                                                              | observation，含 self、附近玩家/方块、revision、events、allowedActions |
+| voice.start     | `{text,provider?}`，1..240 字符                                   | result 与仅本会话 voice 事件；可选 mock / browser / ollama            |
+| voice.interrupt | `{}`                                                              | result 与 interrupted 事件                                            |
 
 `sync` 请求完整 `snapshot`（blocks、revision、persistence）。`edit` 广播携带新版本；客户端发现版本跳跃时重新同步。全局版本用作乐观并发锁：同时提交相同版本仅一条成功，另一条收到 conflict 和最新快照。客户端不会自动重放破坏性编辑，用户基于新状态重试。
 
@@ -36,3 +36,19 @@ GET `/world/presence` 是独立的只读 SSE 订阅，连接后立即发送完�
 `VoiceProvider.create(emit)` 返回 `VoiceSession.push(input) / interrupt() / close()`。输入保留类型化 text 或 PCM16/16kHz 边界，当前所有 provider 都拒绝原始 audio。网页默认经本机 HTTP `/voice/transcribe` 接口上传录音并识别，也可选择浏览器在线识别；WebSocket 仍只发送识别后的文字。`VoiceEvent` 包含 provider、state、turn、subtitle、error，以及供客户端朗读的可选 speakText；房间事件附加 requestId（action id）。每个连接独立会话，每次 start 关闭旧会话并创建新会话，因此 turn 只在单次会话内有效，跨请求使用 requestId 区分。打断取消定时器或模型请求，断线关闭会话；迟到结果不再播放。
 
 `voice.start.payload.provider` 可选 mock、browser、ollama，省略时取服务端 VOICE_PROVIDER，默认 mock。browser 返回带有非 AI 标签的回声；ollama 通过服务端调用本机模型生成文字，客户端再朗读。服务端 idle 仅代表生成完成，网页 speaking/idle 由实际朗读回调控制。配置、浏览器兼容性、网络和隐私边界见 [语音接入说明](VOICE.md)。
+
+## 聊天音频与空间语音协议
+
+`chat` 默认 public；private 必须提供 1–8 个唯一、在线、非发送者的会话 ID。服务端填入发送者身份，事件 data 带 scope、recipients、name、text、kind；audio 消息另带 audioId、durationMs、transcriptAvailable。私聊不广播，observe 同样先过滤再截取历史。私聊的群发对象列表仅发送者和接收者可见。
+
+入房和重连后仅当前连接收到 `chat.auth: {token}`。HTTP `/chat/*` 限制 WEB_ORIGIN 并要求 `Authorization: Bearer <token>`；令牌在退出和重连时失效。POST `/chat/audio?scope=private&to=id1,id2&language=zh` 接收原始音频（1 MiB 上限），验证长度和格式后发布音频事件。GET `/chat/audio/:id` 按消息范围校验，未授权或过期返回 404，无效会话凭证返回 401。不要将令牌放 URL。
+
+真人动作 `spatial.state: {sending:boolean,listening:boolean}` 更新 Avatar 的 voiceSending/voiceListening。`spatial.signal: {to,description?:{type,sdp},candidate?:RTCIceCandidateInit}` 只转发给已选择参与的真人目标，收到的消息为 `spatial.signal: {from,description?,candidate?}`。服务器填入 from，限制 SDP / ICE 大小；不存储、转播或交付 Agent。二进制音频走 WebRTC，不经过游戏 WebSocket。客户端按 20Hz 同步的角色位置和 yaw 混音，静止时保留最后朝向。详见 [聊天与附近语音](CHAT.md)。
+
+### 附近语音自动转写
+
+麦克风开启后，客户端 POST `/chat/spatial/start` 获得片段 id；服务器要求真人、在线、voiceSending=true，并固定当时可听者的会话集合。随后 POST `/chat/spatial/:id` 上传完整、可独立解码的音频段（最大 1 MiB），本机 Whisper 转写后，按开始和完成时可听者交集发布 `chat` 事件，data.scope=`nearby`、kind=`text`、transcriptAvailable=true。发送者也收到字幕。此范围由服务器生成，普通 chat 动作不允许声明 nearby。
+
+可听阈值为共享 spatialMix 的 gain >= 0.03，真人需要 voiceListening，Agent 自动接收。nearby 与 private 一样过滤 WebSocket 事件和 observe，不属于全世界广播；Agent 执行器将 nearby 回复限制为发给说话者的私聊，公共推理轮次不携带附近谈话上下文。
+
+片段 id 绑定发送者，单次使用，45 秒过期，每人最多 4 个捕获/处理中的片段。DELETE `/chat/spatial/:id` 撤销片段；关闭麦克风或会话撤销时同时取消该玩家全部片段及正在执行的识别。所有接口沿用 chat 的 Origin 和会话凭证校验，识别结果发布前再次校验会话与片段有效性。

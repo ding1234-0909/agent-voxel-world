@@ -1,3 +1,4 @@
+import { WorldChat } from './chat';
 import { createVoiceProvider, type VoiceSession } from './voice';
 import { WorldStore } from './store';
 import { Room, Client } from '@colyseus/core';
@@ -10,6 +11,8 @@ import {
   parseInput,
   distance,
   WORLD_ID,
+  visibleEvent,
+  type ChatData,
   type WorldPresence,
   type Block,
   type Input,
@@ -25,6 +28,8 @@ class Avatar extends Schema {
   z = 0;
   yaw = 0;
   connected = true;
+  voiceSending = false;
+  voiceListening = false;
 }
 defineTypes(Avatar, {
   id: 'string',
@@ -35,6 +40,8 @@ defineTypes(Avatar, {
   z: 'number',
   yaw: 'number',
   connected: 'boolean',
+  voiceSending: 'boolean',
+  voiceListening: 'boolean',
 });
 class WorldState extends Schema {
   players = new MapSchema<Avatar>();
@@ -44,6 +51,10 @@ defineTypes(WorldState, { players: { map: Avatar }, revision: 'number' });
 const zero: Input = { x: 0, z: 0, jump: false, yaw: 0 };
 let activeRoom = false;
 export class WorldRoom extends Room<WorldState> {
+  chat = new WorldChat(
+    () => this.state.players.values(),
+    (actor, data) => this.chatEvent(actor, data),
+  );
   blocks = terrain();
   store = new WorldStore();
   private bodies = new Map<
@@ -51,6 +62,7 @@ export class WorldRoom extends Room<WorldState> {
     { vy: number; grounded: boolean; input: Input; lastInput: number }
   >();
   private budget = new Map<string, { at: number; count: number }>();
+  private signalBudget = new Map<string, { at: number; count: number }>();
   private events: WorldEvent[] = [];
   private seq = 0;
   private ownsActive = false;
@@ -76,7 +88,7 @@ export class WorldRoom extends Room<WorldState> {
       if (this.allow(client)) this.snapshot(client);
     });
     this.onMessage('action', (client, value) => {
-      if (!this.allow(client)) return;
+      if (!this.allow(client, value?.type === 'spatial.signal')) return;
       if (
         !value ||
         typeof value !== 'object' ||
@@ -140,17 +152,80 @@ export class WorldRoom extends Room<WorldState> {
         return;
       }
       if (type === 'chat') {
+        try {
+          this.chat.send(client.sessionId, payload);
+          return this.reply(client, id, true);
+        } catch (error) {
+          return this.reply(
+            client,
+            id,
+            false,
+            error instanceof Error ? error.message : 'invalid-chat',
+          );
+        }
+      }
+      if (type === 'spatial.state') {
+        const player = this.state.players.get(client.sessionId);
         if (
-          typeof payload?.text !== 'string' ||
-          !payload.text.trim() ||
-          payload.text.length > 240
+          !player ||
+          player.kind !== 'human' ||
+          typeof payload?.sending !== 'boolean' ||
+          typeof payload?.listening !== 'boolean'
         )
-          return this.reply(client, id, false, 'invalid-chat');
-        this.event('chat', client.sessionId, {
-          text: payload.text.trim(),
-          name: this.state.players.get(client.sessionId)?.name,
-        });
+          return this.reply(client, id, false, 'invalid-spatial-state');
+        if (!payload.sending) this.chat.cancelSpatial(client.sessionId);
+        player.voiceSending = payload.sending;
+        player.voiceListening = payload.listening;
         return this.reply(client, id, true);
+      }
+      if (type === 'spatial.signal') {
+        const source = this.state.players.get(client.sessionId),
+          target = this.state.players.get(payload?.to);
+        if (
+          !source?.connected ||
+          !target?.connected ||
+          source.id === target.id ||
+          source.kind !== 'human' ||
+          target.kind !== 'human' ||
+          !(source.voiceSending || source.voiceListening) ||
+          !(target.voiceSending || target.voiceListening)
+        )
+          return;
+        const description = payload?.description,
+          candidate = payload?.candidate;
+        if (
+          description &&
+          ['offer', 'answer'].includes(description.type) &&
+          typeof description.sdp === 'string' &&
+          description.sdp.length <= 12000
+        )
+          this.clients
+            .find((c) => c.sessionId === target.id)
+            ?.send('spatial.signal', {
+              from: source.id,
+              description: { type: description.type, sdp: description.sdp },
+            });
+        else if (
+          candidate &&
+          typeof candidate.candidate === 'string' &&
+          candidate.candidate.length <= 2000 &&
+          (candidate.sdpMid === null ||
+            (typeof candidate.sdpMid === 'string' &&
+              candidate.sdpMid.length < 100)) &&
+          (candidate.sdpMLineIndex === null ||
+            Number.isInteger(candidate.sdpMLineIndex))
+        )
+          this.clients
+            .find((c) => c.sessionId === target.id)
+            ?.send('spatial.signal', {
+              from: source.id,
+              candidate: {
+                candidate: candidate.candidate,
+                sdpMid: candidate.sdpMid,
+                sdpMLineIndex: candidate.sdpMLineIndex,
+              },
+            });
+        return;
       }
       if (type === 'edit') {
         this.queue = this.queue
@@ -199,7 +274,10 @@ export class WorldRoom extends Room<WorldState> {
       for (const [id, body] of this.bodies) {
         const p = this.state.players.get(id);
         if (!p?.connected) continue;
-        const input = Date.now() - body.lastInput < 250 ? body.input : zero;
+        const input =
+          Date.now() - body.lastInput < 250
+            ? body.input
+            : { ...zero, yaw: p.yaw };
         const b = {
           x: p.x,
           y: p.y,
@@ -247,13 +325,19 @@ export class WorldRoom extends Room<WorldState> {
       lastInput: 0,
     });
     this.snapshot(client);
+    client.send('chat.auth', { token: this.chat.issue(p.id) });
     this.event('joined', p.id, { name: p.name, kind: p.kind });
   }
   async onLeave(client: Client, consented: boolean) {
     this.voices.get(client.sessionId)?.close();
     this.voices.delete(client.sessionId);
     const p = this.state.players.get(client.sessionId);
-    if (p) p.connected = false;
+    this.chat.revoke(client.sessionId);
+    if (p) {
+      p.connected = false;
+      p.voiceSending = false;
+      p.voiceListening = false;
+    }
     const body = this.bodies.get(client.sessionId);
     if (body) body.input = { ...zero };
     if (!consented) {
@@ -261,6 +345,9 @@ export class WorldRoom extends Room<WorldState> {
         const reconnected = await this.allowReconnection(client, 20);
         if (p) p.connected = true;
         this.snapshot(reconnected);
+        reconnected.send('chat.auth', {
+          token: this.chat.issue(client.sessionId),
+        });
         this.event('reconnected', client.sessionId, {});
         return;
       } catch {}
@@ -268,11 +355,13 @@ export class WorldRoom extends Room<WorldState> {
     this.state.players.delete(client.sessionId);
     this.bodies.delete(client.sessionId);
     this.budget.delete(client.sessionId);
+    this.signalBudget.delete(client.sessionId);
     this.event('left', client.sessionId, {});
   }
   async onDispose() {
     for (const voice of this.voices.values()) voice.close();
     this.voices.clear();
+    this.chat.clear();
     await this.queue;
     await this.store.close();
     if (this.ownsActive) activeRoom = false;
@@ -307,17 +396,19 @@ export class WorldRoom extends Room<WorldState> {
   private reply(client: Client, id: string, ok: boolean, error?: string) {
     client.send('result', { id, ok, error, revision: this.state.revision });
   }
-  private allow(client: Client) {
+  private allow(client: Client, signaling = false) {
+    const budget = signaling ? this.signalBudget : this.budget;
+    const limit = signaling ? 120 : 45;
     const now = Date.now(),
-      b = this.budget.get(client.sessionId) ?? { at: now, count: 0 };
+      b = budget.get(client.sessionId) ?? { at: now, count: 0 };
     if (now - b.at > 1000) {
       b.at = now;
       b.count = 0;
     }
     b.count++;
-    this.budget.set(client.sessionId, b);
-    if (b.count > 45) {
-      if (b.count === 46) this.reply(client, '', false, 'rate-limited');
+    budget.set(client.sessionId, b);
+    if (b.count > limit) {
+      if (b.count === limit + 1) this.reply(client, '', false, 'rate-limited');
       return false;
     }
     return true;
@@ -327,6 +418,19 @@ export class WorldRoom extends Room<WorldState> {
     this.events.push(event);
     if (this.events.length > 100) this.events.shift();
     this.broadcast('event', event);
+  }
+  private chatEvent(actor: string, data: ChatData) {
+    const event = {
+      seq: ++this.seq,
+      type: 'chat',
+      actor,
+      data,
+      at: Date.now(),
+    };
+    this.events.push(event);
+    if (this.events.length > 100) this.events.shift();
+    for (const client of this.clients)
+      if (visibleEvent(event, client.sessionId)) client.send('event', event);
   }
   private observe(client: Client, id: string) {
     const self = this.state.players.get(client.sessionId)!;
@@ -343,7 +447,9 @@ export class WorldRoom extends Room<WorldState> {
       players: [...this.state.players.values()]
         .filter((p) => distance(self, p) <= 8)
         .map((p) => p.toJSON()),
-      events: this.events.slice(-30),
+      events: this.events
+        .filter((event) => visibleEvent(event, client.sessionId))
+        .slice(-30),
       allowedActions: [
         'move',
         'edit',

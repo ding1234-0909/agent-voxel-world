@@ -1,3 +1,4 @@
+import { installChatRoutes } from './chat-routes';
 import { config } from 'dotenv';
 import { fileURLToPath } from 'node:url';
 config({ path: fileURLToPath(new URL('../../../.env', import.meta.url)) });
@@ -47,6 +48,11 @@ server.onBeforeShutdown(() => agents.close());
 await server.listen(port, '127.0.0.1');
 const world = await matchMaker.createRoom('world', {});
 app.get('/world', (_req, res) => res.json({ roomId: world.roomId }));
+installChatRoutes(
+  app,
+  () =>
+    (matchMaker.getLocalRoomById(world.roomId) as WorldRoom | undefined)?.chat,
+);
 installPresenceRoutes(app, () =>
   (
     matchMaker.getLocalRoomById(world.roomId) as WorldRoom | undefined

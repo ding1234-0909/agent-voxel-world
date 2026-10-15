@@ -38,6 +38,8 @@ export class Session {
   edits: Edit[] = [];
   events: WorldEvent[] = [];
   voice: unknown[] = [];
+  chatToken = '';
+  spatialSignals: unknown[] = [];
   private id = 0;
   private roomOpen = false;
   private closing?: Promise<void>;
@@ -57,6 +59,13 @@ export class Session {
     this.closing = undefined;
     room.onLeave(() => {
       if (this.room === room) this.roomOpen = false;
+    });
+    room.onMessage('chat.auth', (v: { token: string }) => {
+      this.chatToken = v.token;
+    });
+    room.onMessage('spatial.signal', (value) => {
+      this.spatialSignals.push(value);
+      if (this.spatialSignals.length > 100) this.spatialSignals.shift();
     });
     room.onMessage('snapshot', (s: Snapshot) => (this.snapshot = s));
     room.onMessage('edit', (e: Edit) => {

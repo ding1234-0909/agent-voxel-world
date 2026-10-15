@@ -75,6 +75,7 @@ export function VoicePanel({
     request.current = undefined;
     speech.stop();
     recorder.cancel();
+    connection.voiceLabRecording = false;
     connection.action('voice.interrupt');
   };
   useEffect(() => {
@@ -84,6 +85,7 @@ export function VoicePanel({
         request.current = undefined;
         speech.stop();
         recorder.cancel();
+        connection.voiceLabRecording = false;
         operation.current++;
         setVoice(event);
         return;
@@ -114,6 +116,7 @@ export function VoicePanel({
       operation.current++;
       speech.stop();
       recorder.cancel();
+      connection.voiceLabRecording = false;
       connection.action('voice.interrupt');
     },
     [connection, speech, recorder],
@@ -162,12 +165,19 @@ export function VoicePanel({
     );
   };
   const recordingCallbacks: RecordingCallbacks = {
-    onState: (state, subtitle) => setVoice({ state, subtitle }),
+    onState: (state, subtitle) => {
+      connection.voiceLabRecording = true;
+      setVoice({ state, subtitle });
+    },
     onText: (value) => {
+      connection.voiceLabRecording = false;
       setText(value);
       void send(value);
     },
-    onError: (subtitle) => setVoice({ state: 'error', subtitle }),
+    onError: (subtitle) => {
+      connection.voiceLabRecording = false;
+      setVoice({ state: 'error', subtitle });
+    },
   };
   const localReady = capabilities?.local.available === true;
   const micAvailable =
@@ -297,13 +307,15 @@ export function VoicePanel({
       <div className="voice-actions">
         {provider !== 'mock' && (
           <button
-            disabled={!connected || !micAvailable}
+            disabled={!connected || !micAvailable || connection.chatRecording}
             onClick={() => {
               if (recognizer === 'local' && voice.state === 'listening') {
                 recorder.finish();
                 return;
               }
               stop();
+              connection.stopSpatialInput();
+              connection.voiceLabRecording = true;
               if (recognizer === 'local') {
                 void recorder.start(lang, recordingCallbacks);
                 return;
@@ -316,11 +328,13 @@ export function VoicePanel({
                 lang,
                 recordingCallbacks.onText,
                 recordingCallbacks.onError,
-                () =>
+                () => {
+                  connection.voiceLabRecording = false;
                   setVoice({
                     state: 'idle',
                     subtitle: '录音结束。可以重试或输入文字。',
-                  }),
+                  });
+                },
               );
             }}
           >

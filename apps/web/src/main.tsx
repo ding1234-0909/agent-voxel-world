@@ -6,6 +6,8 @@ import { WorldScene } from './scene';
 import { VoiceDialog } from './VoiceDialog';
 import { WorldPanel } from './WorldPanel';
 import { AgentManagerPanel } from './AgentManagerPanel';
+import { ChatPanel } from './ChatPanel';
+import { SpatialVoicePanel } from './SpatialVoicePanel';
 import './style.css';
 const connection = new Connection();
 if (import.meta.hot) import.meta.hot.dispose(() => connection.dispose());
@@ -27,7 +29,6 @@ function App() {
   const [voiceActivity, setVoiceActivity] = useState('idle');
   const [name, setName] = useState(savedName ?? 'Explorer'),
     [joined, setJoined] = useState(!!savedName),
-    [chat, setChat] = useState(''),
     [target, setTarget] = useState('Aim at a block'),
     [material, setMaterial] = useState<Material>('wood');
   useEffect(() => {
@@ -61,7 +62,6 @@ function App() {
     connection.leave();
     setJoined(false);
     setActivePanel(null);
-    setChat('');
   };
   return (
     <main className={joined ? 'in-game' : 'in-lobby'}>
@@ -181,30 +181,8 @@ function App() {
       />
       {joined && (
         <div className="communication">
-          <section className="chat">
-            <div className="eyebrow">WORLD CHAT</div>
-            <div className="messages">
-              {connection.messages.map((m, i) => (
-                <p key={i}>{m}</p>
-              ))}
-            </div>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                connection.action('chat', { text: chat });
-                setChat('');
-              }}
-            >
-              <input
-                aria-label="Chat message"
-                placeholder="Say something…"
-                value={chat}
-                maxLength={240}
-                onChange={(e) => setChat(e.target.value)}
-              />
-              <button disabled={connection.status !== 'connected'}>↗</button>
-            </form>
-          </section>
+          <SpatialVoicePanel connection={connection} />
+          <ChatPanel connection={connection} />
         </div>
       )}
       {agentPanel && <AgentManagerPanel onClose={() => setAgentPanel(false)} />}

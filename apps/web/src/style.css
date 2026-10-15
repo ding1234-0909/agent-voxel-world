@@ -1144,3 +1144,177 @@ footer {
     margin-top: auto;
   }
 }
+
+/* Communication controls are only mounted in the world. */
+.in-game .communication {
+  width: 330px;
+  gap: 12px;
+}
+.spatial-voice {
+  pointer-events: auto;
+  background: #f6f7eef2;
+  border: 1px solid #ffffff90;
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+.chat-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.chat-title strong {
+  font-size: 12px;
+}
+.chat-title select {
+  max-width: 170px;
+  font: inherit;
+  font-size: 11px;
+  padding: 6px;
+  color: #314f42;
+  border: 1px solid #cbd5c8;
+  border-radius: 4px;
+  background: #fafcf5;
+}
+.spatial-voice small {
+  display: block;
+  font-size: 9px;
+  color: #668076;
+  line-height: 1.7;
+}
+.spatial-actions,
+.chat-tools {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 10px 0 5px;
+}
+.spatial-actions button,
+.enhanced-chat button {
+  font-size: 11px;
+  padding: 6px 9px;
+  border-radius: 4px;
+  background: #e2e9da;
+  color: #314f42;
+}
+.spatial-actions button[aria-pressed='true'] {
+  background: #314f42;
+  color: #fff;
+}
+.in-game .communication .enhanced-chat {
+  max-height: calc(100% - 150px);
+  overflow-y: auto;
+  padding: 16px;
+  border: 1px solid #ffffff80;
+  border-radius: 10px;
+}
+.enhanced-chat .messages {
+  max-height: 150px;
+  margin-top: 12px;
+}
+.chat-message {
+  border-bottom: 1px solid #d9e1d3;
+  padding: 8px 0;
+}
+.chat-message p {
+  margin: 5px 0;
+  white-space: pre-wrap;
+}
+.chat-message small {
+  color: #738272;
+  font-size: 9px;
+}
+.enhanced-chat audio {
+  width: 100%;
+  height: 32px;
+  margin-top: 8px;
+}
+.chat-input-wrap {
+  flex: 1;
+  min-width: 0;
+}
+.enhanced-chat input {
+  width: 100%;
+}
+.enhanced-chat form {
+  align-items: start;
+  gap: 6px;
+}
+.enhanced-chat .chat-send {
+  font-size: 22px;
+  padding: 2px 8px;
+  background: #314f42;
+  color: white;
+}
+.chat-recipients {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 10px;
+}
+.chat-recipients button {
+  font-size: 10px;
+}
+.mention-list {
+  max-height: 135px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #cbd5c8;
+  border-radius: 4px;
+  margin-top: 5px;
+}
+.mention-list button {
+  display: block;
+  text-align: left;
+  width: 100%;
+  background: transparent;
+}
+.mention-list button[aria-selected='true'] {
+  background: #dce7d5;
+}
+.mention-list small {
+  font-size: 9px;
+}
+.mention-list p,
+.chat-help {
+  font-size: 10px;
+  line-height: 1.6;
+  color: #6d7e74;
+  margin: 6px 0 0;
+}
+.chat-error {
+  font-size: 11px;
+  color: #994c33;
+  line-height: 1.6;
+  margin: 8px 0 0;
+}
+@media (max-width: 700px) {
+  .in-game .communication {
+    width: min(310px, calc(100vw - 32px));
+    top: 120px;
+    bottom: 112px;
+  }
+  .spatial-voice {
+    padding: 10px 12px;
+  }
+  .enhanced-chat .messages {
+    max-height: 100px;
+  }
+}
+
+.spatial-caption {
+  font-size: 11px;
+  line-height: 1.6;
+  max-height: 72px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  margin: 8px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid #d9e1d3;
+}
+.spatial-voice {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 45%;
+  overflow-y: auto;
+}

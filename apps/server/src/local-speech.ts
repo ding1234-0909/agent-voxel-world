@@ -91,6 +91,7 @@ export function validatePcmWav(wav: Buffer) {
     sum += (pcm.readInt16LE(i) / 32768) ** 2;
   if (Math.sqrt(sum / (pcm.length / 2)) < 0.003)
     throw new SpeechError('没有检测到清晰声音，请靠近麦克风后重试。');
+  return Math.round(seconds * 1000);
 }
 export class LocalSpeech {
   private busy = false;
@@ -125,6 +126,51 @@ export class LocalSpeech {
         available: false,
         reason: '缺少本地语音模型，请运行 pnpm voice:setup 后重试。',
       };
+    }
+  }
+  async normalize(audio: Buffer, contentType: string, signal: AbortSignal) {
+    const format = formats[contentType.split(';')[0].trim().toLowerCase()];
+    if (!format || !audio.length || audio.length > MAX_AUDIO_BYTES)
+      throw new SpeechError('音频格式或大小无效。');
+    const dir = await mkdtemp(join(tmpdir(), 'voxel-clip-'));
+    try {
+      const input = join(dir, 'input'),
+        output = join(dir, 'audio.wav');
+      await writeFile(input, audio, { mode: 0o600 });
+      await this.runner(
+        this.ffmpeg,
+        [
+          '-nostdin',
+          '-v',
+          'error',
+          '-protocol_whitelist',
+          'file,pipe',
+          '-f',
+          format,
+          '-i',
+          input,
+          '-t',
+          '21',
+          '-vn',
+          '-ar',
+          '16000',
+          '-ac',
+          '1',
+          '-c:a',
+          'pcm_s16le',
+          output,
+        ],
+        signal,
+        15000,
+      );
+      const bytes = await readFile(output);
+      const durationMs = validatePcmWav(bytes);
+      return { bytes, durationMs };
+    } catch (error) {
+      if (error instanceof SpeechError || signal.aborted) throw error;
+      throw new SpeechError('无法处理录音，请检查本机 ffmpeg 或重试。', 502);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
     }
   }
   async transcribe(

@@ -1,3 +1,4 @@
+export * from './chat';
 export const WORLD_ID = 'meadow';
 export type {
   ProviderType,
@@ -18,6 +19,8 @@ export type Player = Vec3 & {
   kind: string;
   yaw: number;
   connected: boolean;
+  voiceSending?: boolean;
+  voiceListening?: boolean;
 };
 export type WorldPresence = {
   worldId: string;
