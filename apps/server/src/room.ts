@@ -97,6 +97,18 @@ export class WorldRoom extends Room<WorldState> {
       )
         return this.reply(client, '', false, 'invalid-envelope');
       const { id, type, payload } = value;
+      if (type === 'rename') {
+        const player = this.state.players.get(client.sessionId);
+        if (
+          !player ||
+          typeof payload?.name !== 'string' ||
+          !payload.name.trim() ||
+          payload.name.trim().length > 24
+        )
+          return this.reply(client, id, false, 'invalid-name');
+        player.name = payload.name.trim();
+        return this.reply(client, id, true);
+      }
       if (type === 'move') {
         const input = parseInput(payload),
           body = this.bodies.get(client.sessionId);

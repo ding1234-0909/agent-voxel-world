@@ -63,6 +63,50 @@ const settings = {
   goal: 'Wait',
   maxTurns: 1,
 };
+it('updates saved settings without inference, protects identity, validates inputs and persists', async () => {
+  const s = fakeSession(),
+    decide = vi.fn(async () => ({ type: 'wait' as const }));
+  const m = setup(s, decide),
+    job = m.create(settings);
+  await vi.waitFor(() => expect(m.list()[0].status).toBe('idle'));
+  await expect(
+    m.update(job.id, {
+      intervalMode: 'random',
+      intervalMinMs: 8000,
+      intervalMaxMs: 4000,
+    }),
+  ).rejects.toThrow('下限');
+  const updated = await m.update(job.id, {
+    maxTurns: 50,
+    intervalMode: 'random',
+    intervalMinMs: 4000,
+    intervalMaxMs: 8000,
+    maxTokens: 1024,
+    allowEdits: true,
+    id: 'forged',
+    status: 'running',
+  });
+  expect(updated).toMatchObject({
+    id: job.id,
+    status: 'idle',
+    sessionId: 'player-1',
+    maxTurns: 50,
+    maxTokens: 1024,
+    allowEdits: true,
+  });
+  expect(decide).toHaveBeenCalledTimes(1);
+  expect(s.join).toHaveBeenCalledTimes(1);
+  await m.close();
+  const restored = setup(s, decide);
+  await restored.load();
+  expect(restored.list()[0]).toMatchObject({
+    id: job.id,
+    maxTurns: 50,
+    intervalMinMs: 4000,
+    intervalMaxMs: 8000,
+    maxTokens: 1024,
+  });
+});
 it('task errors leave a joined character online until explicitly closed', async () => {
   const s = fakeSession(),
     decide = vi

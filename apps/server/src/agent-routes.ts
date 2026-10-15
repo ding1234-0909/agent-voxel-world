@@ -86,6 +86,12 @@ export function installAgentRoutes(app: Express, manager: AgentManager) {
       res.json(manager.resume(String(req.params.id), req.body)),
     ),
   );
+  app.put(
+    '/agents/:id',
+    route(async (req, res) =>
+      res.json(await manager.update(String(req.params.id), req.body)),
+    ),
+  );
   app.post(
     '/agents/:id/stop',
     route((req, res) => res.json(manager.stop(String(req.params.id)))),

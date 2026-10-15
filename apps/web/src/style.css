@@ -706,13 +706,31 @@ footer {
 }
 .agent-dialog {
   width: min(960px, calc(100vw - 32px));
+  height: min(760px, calc(100dvh - 48px));
   max-height: calc(100vh - 48px);
-  padding: 28px;
+  padding: 0;
+  overflow: hidden;
   border: 1px solid #d9e2d1;
   border-radius: 14px;
   background: #f8f8ef;
   color: #263a36;
   box-shadow: 0 25px 100px #16382f55;
+}
+.agent-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.agent-chrome {
+  padding: 24px 28px 0;
+  flex-shrink: 0;
+  border-bottom: 1px solid #dce2d6;
+}
+.agent-body {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 24px 28px;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 .agent-dialog::backdrop {
   background: #173a335c;
@@ -755,9 +773,8 @@ footer {
 .agent-tabs {
   display: flex;
   gap: 8px;
-  border-bottom: 1px solid #dce2d6;
   padding-bottom: 14px;
-  margin-bottom: 22px;
+  margin-bottom: 0;
 }
 .agent-tabs button[aria-pressed='true'] {
   background: #314f42;
@@ -930,9 +947,147 @@ footer {
 .agent-empty small {
   font-size: 11px;
 }
+.agent-list-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.agent-list-heading h3 {
+  margin-bottom: 4px;
+  font-size: 20px;
+}
+.agent-list-heading p {
+  margin: 0;
+}
+.agent-job-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 16px;
+}
+.agent-job-list .agent-job {
+  margin: 0;
+  padding: 22px;
+  background: #fffdf6;
+}
+.agent-job-list .agent-job-title {
+  font-size: 17px;
+}
+.agent-job-model {
+  color: #6a7e70;
+}
+.agent-job-goal {
+  line-height: 1.65;
+  white-space: pre-wrap;
+  max-height: 100px;
+  overflow: auto;
+}
+.agent-job-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 16px 0 20px;
+}
+.agent-job-meta span {
+  padding: 5px 9px;
+  border-radius: 5px;
+  background: #eef2e9;
+  color: #617366;
+  font-size: 11px;
+}
+.agent-card-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.agent-dialog .agent-close-action {
+  margin-left: auto;
+  background: transparent;
+  color: #887063;
+}
+.agent-run-log {
+  border-top: 1px solid #e0e6db;
+  padding-top: 14px;
+}
+.agent-dialog .agent-run-log {
+  margin: 18px 0 0;
+}
+.agent-run-log summary {
+  margin: 0;
+}
+.agent-list-note {
+  margin: 20px 0 0;
+  font-size: 11px;
+  color: #748170;
+  line-height: 1.7;
+}
+.agent-editor {
+  max-width: 680px;
+  margin: 0 auto;
+}
+.agent-dialog .agent-back {
+  padding-left: 0;
+  background: transparent;
+  margin-bottom: 18px;
+}
+.agent-editor h3 {
+  font-size: 21px;
+}
+.agent-section-title {
+  margin: 24px 0 14px;
+  padding-top: 20px;
+  border-top: 1px solid #dce2d6;
+  font-size: 13px;
+}
+.agent-section-title:first-child {
+  margin-top: 20px;
+}
+.agent-editor .agent-model-test {
+  margin-bottom: 16px;
+}
+.agent-editor details {
+  padding: 14px;
+  background: #edf1e7;
+  border-radius: 8px;
+}
+.agent-editor details:not([open]) summary {
+  margin: 0;
+}
+.agent-editor-actions {
+  position: sticky;
+  bottom: -24px;
+  z-index: 1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 0;
+  background: #f8f8ef;
+  border-top: 1px solid #dce2d6;
+}
 @media (max-width: 700px) {
   .agent-dialog {
-    padding: 20px;
+    padding: 0;
+  }
+  .agent-chrome {
+    padding: 18px 18px 0;
+  }
+  .agent-body {
+    padding: 18px;
+  }
+  .agent-heading .eyebrow {
+    display: none;
+  }
+  .agent-tabs small {
+    display: block;
+    margin: 4px 0 0;
+  }
+  .agent-list-heading {
+    align-items: start;
+  }
+  .agent-editor-actions {
+    bottom: -18px;
   }
   .agent-columns {
     grid-template-columns: 1fr;
@@ -1393,27 +1548,6 @@ footer {
 .chat-scope-help {
   display: block;
   min-height: 1.6em;
-}
-.agent-job-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 12px 0;
-}
-.agent-task-form {
-  margin: 12px 0;
-  padding-top: 12px;
-  border-top: 1px solid #d9e1d3;
-}
-.agent-task-form textarea {
-  width: 100%;
-  min-height: 80px;
-  margin-top: 8px;
-  padding: 10px;
-  border: 1px solid #cbd5c8;
-  border-radius: 6px;
-  font: inherit;
-  resize: vertical;
 }
 @media (max-width: 700px) {
   .in-game .communication {

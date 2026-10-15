@@ -175,10 +175,25 @@ try {
     const callsWhenIdle: number = calls;
     await new Promise((resolve) => setTimeout(resolve, 100));
     assert.equal(calls, callsWhenIdle, 'idle does not invoke the model');
+    const edited = await api(`/${job.id}`, 'PUT', {
+      name: 'Renamed AI',
+      intervalMode: 'random',
+      intervalMinMs: 4000,
+      intervalMaxMs: 8000,
+      maxTokens: 1024,
+    });
+    assert.equal(edited.status, 200);
+    assert.equal((await edited.json()).sessionId, idle.sessionId);
+    assert.equal(room.state.players.get(idle.sessionId!)!.name, 'Renamed AI');
+    assert.deepEqual(
+      { x: current.x, y: current.y, z: current.z },
+      originalPosition,
+    );
+    assert.equal(calls, callsWhenIdle);
     speaker = new Session(url.replace('http', 'ws'));
     await speaker.join('Human caller', 'human');
     await speaker.request('chat', {
-      text: '@Managed AI change site',
+      text: '@Renamed AI change site',
       scope: 'public',
     });
     await until(
@@ -255,6 +270,10 @@ try {
   await speaker.join('Human caller', 'human');
   const sleeping = manager.list().find((j) => j.id === created[0])!;
   const beforeWake = calls;
+  assert.equal(
+    (await api(`/${created[0]}`, 'PUT', { maxTurns: 9 })).status,
+    409,
+  );
   await speaker.request('chat', {
     text: 'Wake now',
     scope: 'public',

@@ -297,6 +297,7 @@ type Job = {
   done?: Promise<void>;
   memory: AgentRunState;
   attention: AgentAttention;
+  updating?: boolean;
 };
 const active = (status: ManagedAgentView['status']) =>
   ['joining', 'running', 'stopping'].includes(status);
@@ -447,7 +448,7 @@ export class AgentManager {
     if (this.closing) throw new ManagementError('世界服务正在关闭。', 503);
     const job = this.jobs.get(id);
     if (!job) throw new ManagementError('Agent 不存在。', 404);
-    if (active(job.view.status))
+    if (active(job.view.status) || job.updating)
       throw new ManagementError('Agent 正在运行或关闭，请稍候。', 409);
     const input = object(value);
     const provider = this.providers.get(job.view.providerId);
@@ -466,6 +467,45 @@ export class AgentManager {
     job.done = this.execute(job, provider);
     this.persist();
     return { ...job.view, logs: [...job.view.logs] };
+  }
+  async update(id: string, value: unknown) {
+    if (this.closing) throw new ManagementError('世界服务正在关闭。', 503);
+    const job = this.jobs.get(id);
+    if (!job) throw new ManagementError('Agent 不存在。', 404);
+    if (active(job.view.status) || job.updating)
+      throw new ManagementError('请等待 Agent 待命，或关闭后再修改参数。', 409);
+    const input = object(value);
+    const provider = this.providers.get(
+      text(input.providerId, '服务商', 80, job.view.providerId),
+    );
+    const settings = validateAgent({ ...job.view, ...input }, provider);
+    job.updating = true;
+    try {
+      const session = job.session;
+      if (session && settings.name !== job.view.name) {
+        const result = await session.request('rename', { name: settings.name });
+        if (!result.ok || job.session !== session || active(job.view.status))
+          throw new ManagementError(
+            '角色状态已变化，未保存参数，请刷新后重试。',
+            409,
+          );
+      }
+      if (
+        settings.goal !== job.view.goal ||
+        settings.providerId !== job.view.providerId ||
+        settings.model !== job.view.model ||
+        settings.allowEdits !== job.view.allowEdits
+      ) {
+        job.memory = {};
+        job.attention.clear();
+      }
+      Object.assign(job.view, settings, { providerName: provider.name });
+      this.persist();
+      await this.saving;
+      return { ...job.view, logs: [...job.view.logs] };
+    } finally {
+      job.updating = false;
+    }
   }
   private async execute(job: Job, provider: SavedProvider, run = true) {
     const log = (message: string) => {
@@ -488,6 +528,7 @@ export class AgentManager {
         session.onEvent = (event) => {
           if (
             this.closing ||
+            job.updating ||
             job.session !== session ||
             !['running', 'idle'].includes(job.view.status)
           )
