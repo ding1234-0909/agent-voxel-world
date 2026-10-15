@@ -6,6 +6,7 @@ import {
   type TranscriptionState,
 } from './spatial-transcriber';
 export function SpatialVoicePanel({ connection }: { connection: Connection }) {
+  const [collapsed, setCollapsed] = useState(false);
   const [state, setState] = useState<SpatialStatus>({
     sending: false,
     listening: false,
@@ -47,7 +48,29 @@ export function SpatialVoicePanel({ connection }: { connection: Connection }) {
     engine.current?.update();
   }, [connection.players, connection.status]);
   return (
-    <section className="spatial-voice" aria-label="附近空间语音">
+    <section
+      className={`spatial-voice dock-panel${collapsed ? ' is-collapsed' : ''}`}
+      aria-label="附近空间语音"
+    >
+      <button
+        className="dock-tab"
+        aria-label="展开附近语音"
+        aria-expanded={false}
+        hidden={!collapsed}
+        onClick={() => setCollapsed(false)}
+      >
+        <span>‹ 语音</span>
+        <small className={state.sending ? 'dock-live' : ''}>
+          {state.sending
+            ? '● 外放中'
+            : state.pending
+              ? '授权中'
+              : state.listening
+                ? '收听中'
+                : '已关闭'}
+        </small>
+        {(state.error || transcript.error) && <small>有错误</small>}
+      </button>
       <div className="chat-title">
         <strong>附近语音</strong>
         <small>
@@ -57,6 +80,15 @@ export function SpatialVoicePanel({ connection }: { connection: Connection }) {
               ? '等待麦克风授权'
               : '麦克风已关闭'}
         </small>
+        <button
+          className="dock-collapse"
+          aria-label="收起附近语音"
+          aria-expanded={true}
+          title="收起到侧边（保持语音状态）"
+          onClick={() => setCollapsed(true)}
+        >
+          ›
+        </button>
       </div>
       <div className="spatial-actions">
         <button

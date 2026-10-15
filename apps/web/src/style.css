@@ -1318,3 +1318,58 @@ footer {
   max-height: 45%;
   overflow-y: auto;
 }
+
+/* Keep mounted contents and media sessions intact when docking a panel. */
+.communication .dock-collapse {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 5px;
+  background: #e2e9da;
+  color: #314f42;
+  font-size: 22px;
+  line-height: 1;
+}
+.communication .dock-tab {
+  width: 100%;
+  padding: 12px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  color: #314f42;
+  font-size: 12px;
+}
+.communication .dock-tab small {
+  font-size: 9px;
+  color: #668076;
+}
+.communication .dock-tab .dock-live {
+  color: #a0442e;
+  font-weight: 600;
+}
+.communication .dock-tab[hidden],
+.communication .dock-panel.is-collapsed > :not(.dock-tab) {
+  display: none;
+}
+.in-game .communication .dock-panel.is-collapsed {
+  align-self: flex-end;
+  flex: 0 0 auto;
+  width: 76px;
+  max-height: none;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 10px 4px 4px 10px;
+  box-shadow: 0 6px 20px #294a4014;
+}
+.communication .dock-collapse:hover,
+.communication .dock-tab:hover {
+  background: #d6e3cf;
+}
+.communication .dock-collapse:focus-visible,
+.communication .dock-tab:focus-visible {
+  outline: 2px solid #365e4d;
+  outline-offset: -3px;
+}

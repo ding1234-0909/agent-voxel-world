@@ -65,6 +65,14 @@ function AudioMessage({
   );
 }
 export function ChatPanel({ connection }: { connection: Connection }) {
+  const [collapsed, setCollapsed] = useState(false);
+  const [collapsedAt, setCollapsedAt] = useState(0);
+  const unread = collapsed
+    ? connection.chats.filter(
+        (entry) =>
+          entry.seq > collapsedAt && entry.actor !== connection.room?.sessionId,
+      ).length
+    : 0;
   const [text, setText] = useState(''),
     [scope, setScope] = useState<'public' | 'private'>('public'),
     [recipients, setRecipients] = useState<Player[]>([]);
@@ -283,7 +291,22 @@ export function ChatPanel({ connection }: { connection: Connection }) {
     }
   };
   return (
-    <section className="chat enhanced-chat" aria-label="世界聊天">
+    <section
+      className={`chat enhanced-chat dock-panel${collapsed ? ' is-collapsed' : ''}`}
+      aria-label="世界聊天"
+    >
+      <button
+        className="dock-tab"
+        aria-label={`展开世界聊天${unread ? `，${unread} 条未读` : ''}`}
+        aria-expanded={false}
+        hidden={!collapsed}
+        onClick={() => setCollapsed(false)}
+      >
+        <span>‹ 聊天</span>
+        <small aria-live="polite">
+          {unread ? `${unread} 条未读` : busy ? '处理中' : '世界消息'}
+        </small>
+      </button>
       <div className="chat-title">
         <div className="eyebrow">WORLD CHAT</div>
         <select
@@ -295,6 +318,18 @@ export function ChatPanel({ connection }: { connection: Connection }) {
           <option value="public">群聊 · 所有人</option>
           <option value="private">私聊 · 仅 @ 对象</option>
         </select>
+        <button
+          className="dock-collapse"
+          aria-label="收起世界聊天"
+          aria-expanded={true}
+          title="收起到侧边"
+          onClick={() => {
+            setCollapsedAt(connection.chats.at(-1)?.seq ?? 0);
+            setCollapsed(true);
+          }}
+        >
+          ›
+        </button>
       </div>
       <div className="messages" ref={list} aria-live="polite">
         {connection.chats.map((e) => (
