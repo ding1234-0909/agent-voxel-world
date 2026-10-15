@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "check": "pnpm typecheck && pnpm test && pnpm build",
+    "voice:setup": "node scripts/setup-local-voice.mjs",
     "db:start": "node scripts/database.mjs",
     "db:stop": "node scripts/database.mjs stop",
     "db:generate": "pnpm --filter @voxel/server exec prisma generate",

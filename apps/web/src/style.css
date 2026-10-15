@@ -460,3 +460,39 @@ footer {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* Keep voice controls and chat from covering each other on short viewports. */
+.communication {
+  position: absolute;
+  right: 34px;
+  top: 126px;
+  bottom: 136px;
+  width: 285px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  pointer-events: none;
+}
+.communication .voice,
+.communication .chat {
+  position: static;
+  width: 100%;
+  pointer-events: auto;
+}
+.communication .voice {
+  min-height: 0;
+  max-height: 100%;
+  flex: 0 1 auto;
+}
+.communication .chat {
+  flex: 0 0 auto;
+  max-height: 35%;
+  overflow-y: auto;
+}
+@media (max-width: 900px) {
+  .communication {
+    right: 16px;
+    top: 95px;
+    width: 220px;
+  }
+}

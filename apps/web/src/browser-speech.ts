@@ -21,7 +21,8 @@ const errors: Record<string, string> = {
   'not-allowed': '麦克风权限被拒绝，请在浏览器设置中允许，或改用文字输入。',
   'service-not-allowed': '浏览器不允许语音识别服务，请改用文字输入。',
   'audio-capture': '未找到可用麦克风，请检查设备或改用文字输入。',
-  network: '语音识别服务无法连接，请检查网络或改用文字输入。',
+  network:
+    '浏览器在线识别服务无法连接，这不是世界连接故障。请点击“改用本机识别”后重新录音。',
   'no-speech': '没有听到语音，请重试。',
   'language-not-supported':
     '此浏览器不支持所选识别语言，请切换语言或使用文字输入。',

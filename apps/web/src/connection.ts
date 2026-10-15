@@ -79,7 +79,7 @@ export class Connection {
         }
       });
       room.onMessage('result', (r: { ok: boolean; error?: string }) => {
-        if (!r.ok) {
+        if (!r.ok && r.error !== 'voice-provider-unavailable') {
           this.messages = [...this.messages, `⚠ ${r.error}`].slice(-30);
           this.onChange();
         }

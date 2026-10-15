@@ -25,6 +25,6 @@
 
 ## 语音适配
 
-`VoiceProvider.create(emit)` 返回 `VoiceSession.push(input) / interrupt() / close()`。输入保留类型化 text 或 PCM16/16kHz 边界，当前所有 provider 都拒绝原始 audio。网页在浏览器中完成识别，只发送文字。`VoiceEvent` 包含 provider、state、turn、subtitle、error，以及供客户端朗读的可选 speakText；房间事件附加 requestId（action id）。每个连接独立会话，每次 start 关闭旧会话并创建新会话，因此 turn 只在单次会话内有效，跨请求使用 requestId 区分。打断取消定时器或模型请求，断线关闭会话；迟到结果不再播放。
+`VoiceProvider.create(emit)` 返回 `VoiceSession.push(input) / interrupt() / close()`。输入保留类型化 text 或 PCM16/16kHz 边界，当前所有 provider 都拒绝原始 audio。网页默认经本机 HTTP `/voice/transcribe` 接口上传录音并识别，也可选择浏览器在线识别；WebSocket 仍只发送识别后的文字。`VoiceEvent` 包含 provider、state、turn、subtitle、error，以及供客户端朗读的可选 speakText；房间事件附加 requestId（action id）。每个连接独立会话，每次 start 关闭旧会话并创建新会话，因此 turn 只在单次会话内有效，跨请求使用 requestId 区分。打断取消定时器或模型请求，断线关闭会话；迟到结果不再播放。
 
 `voice.start.payload.provider` 可选 mock、browser、ollama，省略时取服务端 VOICE_PROVIDER，默认 mock。browser 返回带有非 AI 标签的回声；ollama 通过服务端调用本机模型生成文字，客户端再朗读。服务端 idle 仅代表生成完成，网页 speaking/idle 由实际朗读回调控制。配置、浏览器兼容性、网络和隐私边界见 [语音接入说明](VOICE.md)。

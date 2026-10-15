@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Connection } from './connection';
 import { BrowserSpeech } from './browser-speech';
+import {
+  LocalRecorder,
+  voiceApi,
+  type SpeechCapabilities,
+  type RecordingCallbacks,
+} from './local-recorder';
 type VoiceEvent = {
   requestId?: string;
   state: string;
@@ -15,6 +21,32 @@ export function VoicePanel({
   onJoin: () => Promise<boolean>;
 }) {
   const [speech] = useState(() => new BrowserSpeech());
+  const [recorder] = useState(() => new LocalRecorder());
+  const [recognizer, setRecognizer] = useState('local');
+  const [capabilities, setCapabilities] = useState<SpeechCapabilities>();
+  const [capabilityError, setCapabilityError] = useState('');
+  const [refresh, setRefresh] = useState(0);
+  useEffect(() => {
+    const controller = new AbortController();
+    setCapabilityError('');
+    void fetch(`${voiceApi()}/voice/capabilities`, {
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) throw Error('capabilities');
+        const value = await response.json();
+        if (typeof value.local?.available !== 'boolean')
+          throw Error('capabilities');
+        if (!controller.signal.aborted) setCapabilities(value);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setCapabilities(undefined);
+          setCapabilityError('无法检测本机语音服务，请确认服务已启动后重试。');
+        }
+      });
+    return () => controller.abort();
+  }, [connection.status, refresh]);
   const [provider, setProvider] = useState('browser');
   const [lang, setLang] = useState('zh-CN');
   const [text, setText] = useState('你好，欢迎来到体素世界');
@@ -33,6 +65,7 @@ export function VoicePanel({
     operation.current++;
     request.current = undefined;
     speech.stop();
+    recorder.cancel();
     connection.action('voice.interrupt');
   };
   useEffect(() => {
@@ -41,6 +74,8 @@ export function VoicePanel({
       if (!event.requestId) {
         request.current = undefined;
         speech.stop();
+        recorder.cancel();
+        operation.current++;
         setVoice(event);
         return;
       }
@@ -64,13 +99,15 @@ export function VoicePanel({
     return () => {
       connection.onVoice = () => {};
     };
-  }, [connection, speech, lang, readAloud]);
+  }, [connection, speech, recorder, lang, readAloud]);
   useEffect(
     () => () => {
+      operation.current++;
       speech.stop();
+      recorder.cancel();
       connection.action('voice.interrupt');
     },
-    [connection, speech],
+    [connection, speech, recorder],
   );
   const send = async (value: string) => {
     if (!value.trim() || joining.current || connecting) return;
@@ -115,6 +152,19 @@ export function VoicePanel({
         : { state: 'error', subtitle: '连接已断开，请重试。' },
     );
   };
+  const recordingCallbacks: RecordingCallbacks = {
+    onState: (state, subtitle) => setVoice({ state, subtitle }),
+    onText: (value) => {
+      setText(value);
+      void send(value);
+    },
+    onError: (subtitle) => setVoice({ state: 'error', subtitle }),
+  };
+  const localReady = capabilities?.local.available === true;
+  const micAvailable =
+    recognizer === 'local'
+      ? localReady && recorder.canRecord
+      : speech.canListen;
   return (
     <section className="voice" aria-label="语音实验室">
       <div className="eyebrow">VOICE LAB · 无需云账号</div>
@@ -132,11 +182,30 @@ export function VoicePanel({
             });
           }}
         >
-          <option value="browser">浏览器语音 · 回声体验（非 AI）</option>
-          <option value="ollama">本地 AI · Ollama + 浏览器语音</option>
+          <option value="browser">语音回声 · 非 AI</option>
+          <option value="ollama" disabled={!capabilities?.ollamaConfigured}>
+            本地 AI · Ollama{capabilities?.ollamaConfigured ? '' : '（未配置）'}
+          </option>
           <option value="mock">Mock · 仅文字模拟</option>
         </select>
       </label>
+      {provider !== 'mock' && (
+        <label className="voice-label">
+          语音识别方式
+          <select
+            aria-label="语音识别方式"
+            value={recognizer}
+            onChange={(e) => {
+              stop();
+              setRecognizer(e.target.value);
+              setVoice({ state: 'idle', subtitle: '识别方式已切换。' });
+            }}
+          >
+            <option value="local">本机 Whisper · 无需联网识别</option>
+            <option value="browser">浏览器在线识别 · 需网络</option>
+          </select>
+        </label>
+      )}
       {provider !== 'mock' && (
         <div className="voice-options">
           <select
@@ -159,7 +228,9 @@ export function VoicePanel({
               onChange={(e) => {
                 speech.stop();
                 setReadAloud(e.target.checked);
-                setVoice((v) => ({ ...v, state: 'idle' }));
+                setVoice((v) =>
+                  v.state === 'speaking' ? { ...v, state: 'idle' } : v,
+                );
               }}
             />
             自动朗读
@@ -203,20 +274,25 @@ export function VoicePanel({
       <div className="voice-actions">
         {provider !== 'mock' && (
           <button
-            disabled={!connected || !speech.canListen}
+            disabled={!connected || !micAvailable}
             onClick={() => {
+              if (recognizer === 'local' && voice.state === 'listening') {
+                recorder.finish();
+                return;
+              }
               stop();
+              if (recognizer === 'local') {
+                void recorder.start(lang, recordingCallbacks);
+                return;
+              }
               setVoice({
                 state: 'listening',
-                subtitle: '请说一句话，停顿后自动发送…',
+                subtitle: '浏览器在线识别中，停顿后自动发送…',
               });
               speech.listen(
                 lang,
-                (value) => {
-                  setText(value);
-                  void send(value);
-                },
-                (error) => setVoice({ state: 'error', subtitle: error }),
+                recordingCallbacks.onText,
+                recordingCallbacks.onError,
                 () =>
                   setVoice({
                     state: 'idle',
@@ -225,7 +301,9 @@ export function VoicePanel({
               );
             }}
           >
-            麦克风
+            {recognizer === 'local' && voice.state === 'listening'
+              ? '结束录音'
+              : '麦克风'}
           </button>
         )}
         <button
@@ -263,17 +341,65 @@ export function VoicePanel({
           </button>
         )}
       </div>
+      {provider !== 'mock' && recognizer === 'local' && (
+        <>
+          <label className="voice-label">
+            或选择音频文件（最长 20 秒 / 5 MiB）
+            <input
+              type="file"
+              aria-label="选择音频文件"
+              accept=".wav,.webm,.mp4,.m4a,.ogg"
+              disabled={!connected || !localReady}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = '';
+                if (file) {
+                  stop();
+                  void recorder.transcribeFile(file, lang, recordingCallbacks);
+                }
+              }}
+            />
+          </label>
+          <small role="status">
+            {capabilityError ||
+              capabilities?.local.reason ||
+              '正在检测本机识别服务…'}
+          </small>
+          {!localReady && (
+            <button onClick={() => setRefresh((n) => n + 1)}>重新检测</button>
+          )}
+        </>
+      )}
+      {provider !== 'mock' &&
+        recognizer === 'browser' &&
+        voice.state === 'error' && (
+          <button
+            onClick={() => {
+              stop();
+              setRecognizer('local');
+              setRefresh((n) => n + 1);
+              setVoice({
+                state: 'idle',
+                subtitle: '已切换到本机 Whisper，请重新点击麦克风录音。',
+              });
+            }}
+          >
+            改用本机识别
+          </button>
+        )}
       <small>
         {provider === 'mock'
           ? '文字模拟 · 无麦克风、音频或真实 AI'
           : provider === 'browser'
             ? '无需账号或信用卡。复述你的话，用于体验识别与朗读。'
-            : '需先安装 Ollama、下载本地模型并设置 OLLAMA_MODEL，重启服务。每轮独立回复，不控制世界。'}
+            : '本机 Ollama 生成回复，每轮独立，不控制世界。'}
       </small>
       {provider !== 'mock' && (
         <small>
-          浏览器识别可能将音频发送给浏览器厂商，并依赖网络；朗读取决于已安装的语音。
-          {!speech.canListen && ' 当前无法使用语音识别，请输入文字。'}
+          {recognizer === 'local'
+            ? '录音仅发往本机服务，识别后删除临时文件。朗读仍使用浏览器语音。'
+            : '在线识别可能将音频发送给浏览器厂商；网络不可达时请改用本机识别。'}
+          {!micAvailable && ' 当前无法录音，可输入文字或检查识别服务。'}
           {!speech.canSpeak && ' 当前无法朗读，仅显示文字。'}
         </small>
       )}

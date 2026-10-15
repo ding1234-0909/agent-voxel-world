@@ -116,31 +116,33 @@ function App() {
       )}
       <div className="crosshair">+</div>
       <div className="target">{target}</div>
-      <VoicePanel connection={connection} onJoin={joinWorld} />
-      <section className="chat">
-        <div className="eyebrow">WORLD CHAT</div>
-        <div className="messages">
-          {connection.messages.map((m, i) => (
-            <p key={i}>{m}</p>
-          ))}
-        </div>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            connection.action('chat', { text: chat });
-            setChat('');
-          }}
-        >
-          <input
-            aria-label="Chat message"
-            placeholder="Say something…"
-            value={chat}
-            maxLength={240}
-            onChange={(e) => setChat(e.target.value)}
-          />
-          <button disabled={!joined}>↗</button>
-        </form>
-      </section>
+      <div className="communication">
+        <VoicePanel connection={connection} onJoin={joinWorld} />
+        <section className="chat">
+          <div className="eyebrow">WORLD CHAT</div>
+          <div className="messages">
+            {connection.messages.map((m, i) => (
+              <p key={i}>{m}</p>
+            ))}
+          </div>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              connection.action('chat', { text: chat });
+              setChat('');
+            }}
+          >
+            <input
+              aria-label="Chat message"
+              placeholder="Say something…"
+              value={chat}
+              maxLength={240}
+              onChange={(e) => setChat(e.target.value)}
+            />
+            <button disabled={!joined}>↗</button>
+          </form>
+        </section>
+      </div>
       <footer>
         <div className="controls">
           <b>W A S D</b> move <b>SPACE</b> jump <b>CLICK</b> look <b>ESC</b>{' '}

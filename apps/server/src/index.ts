@@ -6,6 +6,7 @@ import { createServer } from 'node:http';
 import { Server, matchMaker } from '@colyseus/core';
 import { WebSocketTransport } from '@colyseus/ws-transport';
 import { WorldRoom } from './room';
+import { installSpeechRoutes } from './speech-routes';
 const app = express();
 app.use((req, res, next) => {
   if (
@@ -14,6 +15,7 @@ app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', req.headers.origin);
   next();
 });
+installSpeechRoutes(app);
 app.get('/health', (_req, res) =>
   res.json({
     ok: true,
