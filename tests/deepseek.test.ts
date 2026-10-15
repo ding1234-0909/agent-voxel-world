@@ -6,6 +6,7 @@ import {
   DeepSeekError,
   executeAction,
   runAgent,
+  nextIntervalMs,
 } from '../apps/agent/src/deepseek';
 import type { Observation, Session } from '../apps/agent/src/session';
 const config = () => ({
@@ -263,5 +264,135 @@ describe('AI action execution', () => {
     expect(decide).toHaveBeenCalledTimes(3);
     expect(s.request).not.toHaveBeenCalled();
     expect(s.move).not.toHaveBeenCalled();
+  });
+});
+
+describe('continuous and randomized scheduling', () => {
+  it('supports explicit CLI scheduling settings while preserving finite defaults', () => {
+    expect(config()).toMatchObject({
+      continuous: false,
+      intervalMode: 'fixed',
+    });
+    expect(
+      agentConfig({
+        DEEPSEEK_API_KEY: 'fixture',
+        AGENT_CONTINUOUS: 'true',
+        AGENT_INTERVAL_MODE: 'random',
+        AGENT_INTERVAL_MIN_MS: '4000',
+        AGENT_INTERVAL_MAX_MS: '8000',
+      }),
+    ).toMatchObject({
+      continuous: true,
+      intervalMode: 'random',
+      intervalMinMs: 4000,
+      intervalMaxMs: 8000,
+    });
+    for (const env of [
+      { AGENT_CONTINUOUS: 'yes' },
+      { AGENT_INTERVAL_MODE: 'bad' },
+      { AGENT_INTERVAL_MIN_MS: '9000', AGENT_INTERVAL_MAX_MS: '4000' },
+      { AGENT_INTERVAL_MIN_MS: '0' },
+    ])
+      expect(() =>
+        agentConfig({ DEEPSEEK_API_KEY: 'fixture', ...env }),
+      ).toThrow();
+  });
+  it('samples inclusive random bounds and preserves fixed intervals', () => {
+    const cfg = {
+      ...config(),
+      intervalMode: 'random' as const,
+      intervalMinMs: 4000,
+      intervalMaxMs: 8000,
+    };
+    expect(nextIntervalMs(cfg, () => 0)).toBe(4000);
+    expect(nextIntervalMs(cfg, () => 0.999999)).toBe(8000);
+    expect(nextIntervalMs(cfg, () => 0.5)).toBe(6000);
+    expect(
+      nextIntervalMs({ ...cfg, intervalMinMs: 5000, intervalMaxMs: 5000 }),
+    ).toBe(5000);
+    expect(
+      nextIntervalMs(
+        { ...cfg, intervalMode: 'fixed', intervalMs: 3000 },
+        () => 0.5,
+      ),
+    ).toBe(3000);
+  });
+  it('continues past the finite turn limit and stops only on cancellation', async () => {
+    const abort = new AbortController();
+    let turns = 0;
+    const decide = vi.fn(async () => {
+      if (++turns === 202) abort.abort();
+      return { type: 'wait' as const };
+    });
+    await runAgent(
+      { observe: async () => observation, move: vi.fn(), request: vi.fn() },
+      { decide },
+      { ...config(), continuous: true, maxTurns: 1 },
+      abort.signal,
+      () => {},
+    );
+    expect(decide).toHaveBeenCalledTimes(202);
+  });
+  it('draws a fresh interval only between turns', async () => {
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    try {
+      await runAgent(
+        { observe: async () => observation, move: vi.fn(), request: vi.fn() },
+        { decide: async () => ({ type: 'wait' }) },
+        {
+          ...config(),
+          maxTurns: 3,
+          intervalMode: 'random',
+          intervalMinMs: 0,
+          intervalMaxMs: 0,
+        },
+        signal(),
+        () => {},
+      );
+      expect(random).toHaveBeenCalledTimes(2);
+    } finally {
+      random.mockRestore();
+    }
+  });
+  it('interrupts a long randomized wait without starting another inference', async () => {
+    const abort = new AbortController(),
+      decide = vi.fn(async () => ({ type: 'wait' as const }));
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const started = Date.now();
+    try {
+      await runAgent(
+        { observe: async () => observation, move: vi.fn(), request: vi.fn() },
+        { decide },
+        {
+          ...config(),
+          continuous: true,
+          intervalMode: 'random',
+          intervalMinMs: 60000,
+          intervalMaxMs: 60000,
+        },
+        abort.signal,
+        () => {
+          timer = setTimeout(() => abort.abort(), 10);
+        },
+      );
+      expect(Date.now() - started).toBeLessThan(1000);
+      expect(decide).toHaveBeenCalledTimes(1);
+    } finally {
+      clearTimeout(timer);
+      abort.abort();
+    }
+  });
+  it('still terminates continuous mode after repeated provider failures', async () => {
+    const decide = vi.fn().mockRejectedValue(new DeepSeekError('unavailable'));
+    await expect(
+      runAgent(
+        { observe: async () => observation, move: vi.fn(), request: vi.fn() },
+        { decide },
+        { ...config(), continuous: true },
+        signal(),
+        () => {},
+      ),
+    ).rejects.toThrow('已停止');
+    expect(decide).toHaveBeenCalledTimes(3);
   });
 });

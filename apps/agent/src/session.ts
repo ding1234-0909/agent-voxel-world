@@ -28,7 +28,12 @@ export async function until(predicate: () => boolean, timeout = 5000) {
 }
 export class Session {
   room!: Room;
-  client = new Client(process.env.SERVER_URL ?? 'ws://127.0.0.1:2567');
+  client: Client;
+  constructor(
+    private serverUrl = process.env.SERVER_URL ?? 'ws://127.0.0.1:2567',
+  ) {
+    this.client = new Client(serverUrl);
+  }
   snapshot?: Snapshot;
   edits: Edit[] = [];
   events: WorldEvent[] = [];
@@ -38,10 +43,7 @@ export class Session {
   private closing?: Promise<void>;
   private pending = new Map<string, (value: any) => void>();
   async join(name: string, kind = 'scripted-agent') {
-    const endpoint = (process.env.SERVER_URL ?? 'ws://127.0.0.1:2567').replace(
-      /^ws/,
-      'http',
-    );
+    const endpoint = this.serverUrl.replace(/^ws/, 'http');
     const info = (await fetch(`${endpoint}/world`).then((r) => r.json())) as {
       roomId: string;
     };
@@ -57,9 +59,18 @@ export class Session {
       if (this.room === room) this.roomOpen = false;
     });
     room.onMessage('snapshot', (s: Snapshot) => (this.snapshot = s));
-    room.onMessage('edit', (e: Edit) => this.edits.push(e));
-    room.onMessage('event', (e: WorldEvent) => this.events.push(e));
-    room.onMessage('voice', (value) => this.voice.push(value));
+    room.onMessage('edit', (e: Edit) => {
+      this.edits.push(e);
+      if (this.edits.length > 512) this.edits.shift();
+    });
+    room.onMessage('event', (e: WorldEvent) => {
+      this.events.push(e);
+      if (this.events.length > 100) this.events.shift();
+    });
+    room.onMessage('voice', (value) => {
+      this.voice.push(value);
+      if (this.voice.length > 100) this.voice.shift();
+    });
     for (const type of ['result', 'observation'])
       room.onMessage(type, (value: { id: string }) => {
         this.pending.get(value.id)?.(value);

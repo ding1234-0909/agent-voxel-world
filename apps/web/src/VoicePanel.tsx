@@ -55,7 +55,7 @@ export function VoicePanel({
   }, [connection.status, refresh]);
   const [provider, setProvider] = useState('browser');
   const [lang, setLang] = useState('zh-CN');
-  const [text, setText] = useState('你好，欢迎来到体素世界');
+  const [text, setText] = useState('你好，欢迎来到奇幻世界');
   const [readAloud, setReadAloud] = useState(true);
   const [voice, setVoice] = useState<VoiceEvent>({
     state: 'idle',
@@ -106,7 +106,7 @@ export function VoicePanel({
       }
     };
     return () => {
-      connection.onVoice = () => {};
+      connection.onVoice = () => { };
     };
   }, [connection, speech, recorder, lang, readAloud]);
   useEffect(

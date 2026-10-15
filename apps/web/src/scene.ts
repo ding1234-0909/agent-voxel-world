@@ -105,6 +105,7 @@ export class WorldScene {
   };
   private keydown = (event: KeyboardEvent) => {
     if (this.connection.status !== 'connected') return;
+    if (document.querySelector('dialog[open]')) return;
     if ((event.target as HTMLElement).matches('input,textarea,button,select'))
       return;
     this.keys.add(event.code);

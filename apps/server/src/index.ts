@@ -8,6 +8,8 @@ import { WebSocketTransport } from '@colyseus/ws-transport';
 import { WorldRoom } from './room';
 import { installSpeechRoutes } from './speech-routes';
 import { installPresenceRoutes } from './presence-routes';
+import { AgentManager, ProviderStore } from './agent-manager';
+import { installAgentRoutes } from './agent-routes';
 const app = express();
 app.use((req, res, next) => {
   if (
@@ -37,6 +39,11 @@ const server = new Server({
 });
 server.define('world', WorldRoom);
 const port = Number(process.env.PORT ?? 2567);
+const providers = new ProviderStore();
+await providers.load();
+const agents = new AgentManager(providers, `ws://127.0.0.1:${port}`);
+installAgentRoutes(app, agents);
+server.onBeforeShutdown(() => agents.close());
 await server.listen(port, '127.0.0.1');
 const world = await matchMaker.createRoom('world', {});
 app.get('/world', (_req, res) => res.json({ roomId: world.roomId }));

@@ -5,6 +5,7 @@ import { Connection } from './connection';
 import { WorldScene } from './scene';
 import { VoicePanel } from './VoicePanel';
 import { WorldPanel } from './WorldPanel';
+import { AgentManagerPanel } from './AgentManagerPanel';
 import './style.css';
 const connection = new Connection();
 if (import.meta.hot) import.meta.hot.dispose(() => connection.dispose());
@@ -16,6 +17,12 @@ function App() {
   const [activePanel, setActivePanel] = useState<'players' | 'voice' | null>(
     null,
   );
+  const [agentPanel, setAgentPanel] = useState(false);
+  const openAgents = () => {
+    if (document.pointerLockElement) document.exitPointerLock();
+    window.dispatchEvent(new Event('blur'));
+    setAgentPanel(true);
+  };
   const [voiceActivity, setVoiceActivity] = useState('idle');
   const [name, setName] = useState(savedName ?? 'Explorer'),
     [joined, setJoined] = useState(!!savedName),
@@ -70,6 +77,9 @@ function App() {
         <div className="status">
           <i className={connection.status === 'connected' ? 'online' : ''} />
           {connection.status} <span>WORLD 01</span>
+          <button className="exit-game" onClick={openAgents}>
+            Agent 管理
+          </button>
           {joined && (
             <nav className="game-panels" aria-label="游戏面板">
               <button
@@ -136,7 +146,10 @@ function App() {
             />
             <button>Enter world ↗</button>
           </form>
-          <small>Local multiplayer prototype · no paid services</small>
+          <button className="join-agents" onClick={openAgents}>
+            创建 Agent 玩家 / 配置模型
+          </button>
+          <small>共享世界 · 支持本机模型与云端模型</small>
         </div>
       )}
       {joined && (
@@ -178,6 +191,7 @@ function App() {
           </form>
         </section>
       </div>
+      {agentPanel && <AgentManagerPanel onClose={() => setAgentPanel(false)} />}
       <footer>
         <div className="controls">
           <b>W A S D</b> move <b>SPACE</b> jump <b>CLICK</b> look <b>ESC</b>{' '}

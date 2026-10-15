@@ -1,8 +1,27 @@
-# 接入 DeepSeek AI 玩家
+# 接入 AI 玩家
 
 DeepSeek 玩家复用 `apps/agent/src/session.ts`，通过 OpenAI 官方 Node SDK 连接 `https://api.deepseek.com`，运行“观察 → JSON 动作决策 → 本地校验 → 世界服务执行 → 观察结果”循环。它不是 Voice Lab 的语音聊天提供商，也不是原有固定脚本 Scout。
 
-## 配置与启动
+## 大厅控制台（推荐）
+
+无需先进入游戏。点击大厅中央的 **创建 Agent 玩家 / 配置模型**，或右上角 **Agent 管理**。
+
+1. 在 **模型服务商** 中添加或编辑 DeepSeek、本机 Ollama、OpenAI 兼容服务。填写 API Base URL、默认模型和 API Key；本机 Ollama 不需要密钥。
+2. 保存后切换到 **Agent 玩家**，选择服务商，点击 **测试连接 / 获取模型列表**，选择或手动填写模型 ID。这个按钮只读取模型列表，不执行推理；不提供模型列表接口的网关仍可手动填写。
+3. 设置昵称、目标和推理参数。运行方式可选 **限定轮数** 或 **持续运行（永久）**；轮询可选 **固定间隔** 或 **随机区间**（默认 4000–8000 毫秒）。每轮推理和动作结束后再等待，随机模式每轮重新抽取时间，不并发推理。DeepSeek 支持开关思考模式、推理强度和输出 token 上限。方块修改默认关闭。
+4. 点击 **创建并加入世界**。Agent 以 `ai-agent` 身份加入同一个世界，玩家列表与在线代理数量实时更新。右侧显示状态和运行记录，可随时停止。
+
+最多同时运行 4 个由控制台管理的 Agent；不同 Agent 可以使用不同服务商/模型。关闭面板、退出真人游戏不会停止 Agent，点击 **停止 Agent** 即可取消等待和推理并退出；限定轮数模式在达到上限后自动退出，持续模式忽略轮数上限。终止性模型错误、连续三次失败也会停止。服务关闭会停止全部受管理的 Agent；重启后不会自动恢复运行。旧的命令行 Agent 独立管理，只出现在世界玩家列表中。
+
+服务商保存在本机 `.data/agent-providers.json`（文件权限 `0600`，未加密，请勿分享或提交）。首次启动自动导入 `DEEPSEEK_API_KEY` / `DEEPSEEK_MODEL` / `OLLAMA_MODEL`；已有配置文件后以控制台保存值为准，修改 `.env` 不会覆盖它。页面仅收到 `hasApiKey` 状态；编辑时留空保留密钥。更换地址域名或服务类型必须重新填写密钥。删除服务商不会删除世界方块。
+
+通用服务必须兼容 OpenAI **Chat Completions** 和模型的 JSON 动作输出，原生 Anthropic/Responses 等接口尚未接入。可在兼容设置中关闭 `response_format`，或选择 `max_completion_tokens`。DeepSeek 专用思考字段不会发给其他服务商。本机 Ollama 使用 `http://127.0.0.1:11434/v1`，先在 Ollama 下载模型，再获取列表；配置 Ollama 失败不影响使用 DeepSeek。[Ollama 官方兼容接口说明](https://docs.ollama.com/api/openai-compatibility)。
+
+管理 API 仅接受 `WEB_ORIGIN` 指定页面的 Origin，世界服务仍只绑定本机。`GET /agents/providers` 返回脱敏配置，`POST/PUT/DELETE /agents/providers[/id]` 管理服务商，`GET /agents/providers/:id/models` 查询模型，`GET/POST /agents` 查看/创建玩家，`POST /agents/:id/stop` 停止。写请求使用 JSON。它是本机原型的管理接口，不应直接暴露到公网。
+
+## DeepSeek 命令行（仍可使用）
+
+### 配置与启动
 
 在项目根目录现有 `.env` 中追加以下配置，保留已有数据库等设置。也可以通过环境变量传入；环境变量优先。不要提交 API Key，不要使用 `VITE_*`。
 
@@ -17,7 +36,7 @@ AGENT_ALLOW_EDITS=false
 
 启动最新代码的世界服务，再运行独立 Agent 进程。默认世界端口为 2567；当前浏览器 5187 对应的开发世界使用 2577：
 
-若已有世界进程尚未加载这次修改，Agent 会在调用模型前提示更新服务并退出。本次没有重启正在使用的开发世界；当前 memory 模式重启会丢失方块编辑，须先备份/恢复或使用持久化配置。
+当前 memory 模式在普通重启时会丢失方块编辑；更新运行中的世界前须先备份/恢复，或使用数据库持久化配置。
 
 ```sh
 SERVER_URL=ws://127.0.0.1:2577 pnpm agent:deepseek
@@ -47,13 +66,25 @@ DEEPSEEK_TIMEOUT_MS=60000
 - `move`：世界坐标方向 x/z 在 -1..1，跳跃布尔值，持续 100–1500ms；本地以 10Hz 发送输入，取消或结束后发送停止输入。
 - `edit`：需显式设置 `AGENT_ALLOW_EDITS=true` 才允许放置/移除方块。使用观察时的世界版本，服务端继续检查距离、碰撞、基岩、边界和版本冲突。被拒绝的编辑不会自动重放。
 
-默认 20 轮，`AGENT_MAX_TURNS` 范围 1–200；间隔 `AGENT_INTERVAL_MS` 默认 3000，范围 1000–60000。每次输入最多 500 个附近方块、16 个玩家、12 条最近事件和上轮动作结果。没有任意 shell、文件系统或网络工具。AI 身份与脚本身份一样只是显示标签，不授予额外权限；本机原型仍没有账户认证。
+默认 20 轮，`AGENT_MAX_TURNS` 范围 1–200；设 `AGENT_CONTINUOUS=true` 可持续运行，直到 Ctrl+C、服务关闭或终止错误。间隔 `AGENT_INTERVAL_MS` 默认 3000，范围 1000–60000。命令行随机间隔示例：
+
+```dotenv
+AGENT_CONTINUOUS=true
+AGENT_INTERVAL_MODE=random
+AGENT_INTERVAL_MIN_MS=4000
+AGENT_INTERVAL_MAX_MS=8000
+```
+
+随机上下限均为 1000–60000 的整数，下限不得大于上限，相等时为固定等待时间。省略 `AGENT_INTERVAL_MODE` 时保持 `fixed`。持续运行不代表跨服务重启恢复，云端调用会持续产生用量。运行记录及会话事件只保留有限条历史，避免长期运行时无界增长。
+
+每次输入最多 500 个附近方块、16 个玩家、12 条最近事件和上轮动作结果。没有任意 shell、文件系统或网络工具。AI 身份与脚本身份一样只是显示标签，不授予额外权限；本机原型仍没有账户认证。
 
 模型自主表现需用真实 Key 实测。自动化测试使用 OpenAI SDK 的模拟 HTTP 响应验证请求格式，并在独立临时世界验证移动、聊天、编辑及离开；这些测试不调用付费模型。
 
 ```sh
 pnpm check
 pnpm test:agent:deepseek  # 自动启动独立临时世界，不触碰正在玩的世界
+pnpm test:agents          # 多服务商管理、Origin 校验、密钥脱敏、并发/停止/清理
 ```
 
 接口依据：[DeepSeek Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion)、[JSON Output](https://api-docs.deepseek.com/guides/json_mode)。

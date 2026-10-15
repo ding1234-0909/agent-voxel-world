@@ -57,3 +57,7 @@ pnpm format:check
 Agent 观察是以自身为中心半径 8 的距离裁剪，最多 500 个最近方块，不做遮挡/视锥裁剪；这是结构化场景接口，并非模型视觉。Agent 与人类共用同一移动和编辑校验。Scout 脚本 Agent 没有 LLM；DeepSeek AI 玩家由模型决策，两者都没有额外管理权限。协议见 [接口文档](docs/PROTOCOL.md)。
 
 语音方案已支持 `mock`、`browser` 和 `ollama`。回声不是 AI；Ollama 需预先安装并配置。语音识别默认由本机 Whisper 处理，浏览器在线识别可选，朗读是否联网取决于浏览器语音。尚未接入 Google Vertex 或其他付费云端音频模型。未来凭据必须放服务端环境，不能放 `VITE_*`。
+
+### 在大厅创建 AI 玩家
+
+点击 **Agent 管理 → 模型服务商**，配置 DeepSeek、本机 Ollama 或 OpenAI 兼容接口；再到 **Agent 玩家** 选择服务商与模型，设置任务并点击 **创建并加入世界**。已有 DeepSeek 环境变量会在首次启动管理服务时导入。配置与创建分离，支持多个 Agent 独立运行、查看日志和停止。详见 [AI 玩家接入](docs/AGENT_PLAYERS.md)。

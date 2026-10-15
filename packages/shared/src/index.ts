@@ -1,4 +1,10 @@
 export const WORLD_ID = 'meadow';
+export type {
+  ProviderType,
+  ProviderView,
+  AgentSettings,
+  ManagedAgentView,
+} from './agents';
 export const PROTOCOL_VERSION = 1;
 export const LIMIT = 12;
 export const MAX_Y = 15;
