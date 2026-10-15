@@ -25,7 +25,7 @@ export class ClipRecorder {
     clearTimeout(this.timer);
   }
   async start(
-    onDone: (blob: Blob) => void,
+    onDone: (blob: Blob, durationMs: number) => void,
     onError: (message: string) => void,
     onReady: () => void,
   ) {
@@ -54,6 +54,7 @@ export class ClipRecorder {
         audioBitsPerSecond: 64000,
       });
       this.recorder = recorder;
+      const startedAt = performance.now();
       const chunks: Blob[] = [];
       let bytes = 0;
       recorder.ondataavailable = (e) => {
@@ -73,7 +74,7 @@ export class ClipRecorder {
         clearTimeout(this.timer);
         this.recorder = undefined;
         const blob = new Blob(chunks, { type: mimeType });
-        if (blob.size) onDone(blob);
+        if (blob.size) onDone(blob, Math.max(1, performance.now() - startedAt));
         else onError('录音为空，请重试。');
       };
       recorder.onerror = () => {

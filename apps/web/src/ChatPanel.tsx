@@ -3,6 +3,7 @@ import type { ChatEntry, Player } from '@voxel/shared';
 import type { Connection } from './connection';
 import { LocalRecorder, voiceApi } from './local-recorder';
 import { ClipRecorder } from './clip-recorder';
+import { VoiceDraft } from './VoiceDraft';
 import { mentionQuery, consumeMention } from './chat-mentions';
 function AudioMessage({
   entry,
@@ -96,6 +97,7 @@ export function ChatPanel({ connection }: { connection: Connection }) {
       | 'recording'
       | 'sending'
     >('idle');
+  const [clipDuration, setClipDuration] = useState(0);
   const [clip, setClip] = useState<Blob>(),
     [preview, setPreview] = useState('');
   const input = useRef<HTMLInputElement>(null),
@@ -253,11 +255,12 @@ export function ChatPanel({ connection }: { connection: Connection }) {
       });
     else
       void recorder.start(
-        (blob) => {
+        (blob, durationMs) => {
           connection.chatRecording = false;
+          setClipDuration(durationMs);
           setClip(blob);
           setMode('idle');
-          setStatus('录音已保存为草稿，可试听后发送。');
+          setStatus('');
         },
         fail,
         () => {
@@ -469,12 +472,17 @@ export function ChatPanel({ connection }: { connection: Connection }) {
         </div>
       )}
       {preview && (
-        <div className="voice-draft">
-          <audio controls src={preview} />
-          <button disabled={busy} onClick={() => setClip(undefined)}>
-            丢弃录音
-          </button>
-        </div>
+        <VoiceDraft
+          key={preview}
+          src={preview}
+          durationMs={clipDuration}
+          busy={busy}
+          onDiscard={() => {
+            setClip(undefined);
+            setStatus('');
+            setError('');
+          }}
+        />
       )}
       {picker && (
         <div className="mention-picker">
@@ -569,59 +577,64 @@ export function ChatPanel({ connection }: { connection: Connection }) {
         </div>
       )}
       <form
+        className={clip ? 'chat-audio-send-row' : undefined}
         onSubmit={(e) => {
           e.preventDefault();
           void send();
         }}
       >
-        <div className="chat-input-wrap">
-          <input
-            ref={input}
-            aria-label="Chat message"
-            role="combobox"
-            aria-autocomplete="list"
-            aria-expanded={picker?.source === 'input'}
-            aria-activedescendant={
-              picker?.source === 'input' && candidates.length
-                ? `mention-${candidates[activeChoice].id}`
-                : undefined
-            }
-            aria-controls="chat-mentions"
-            placeholder={
-              scope === 'private'
-                ? recipients.length
-                  ? '发送私聊消息…'
-                  : '先选择私聊对象…'
-                : '说点什么，@ 选择玩家…'
-            }
-            disabled={busy || !!clip}
-            value={text}
-            maxLength={240}
-            onKeyDown={onKey}
-            onChange={(e) => {
-              setText(e.target.value);
-              const pos = e.target.selectionStart ?? 0;
-              caret.current = pos;
-              setPicker(mentionQuery(e.target.value, pos));
-              setChoice(0);
-            }}
-            onSelect={(e) => {
-              caret.current = e.currentTarget.selectionStart ?? 0;
-              if (picker?.source !== 'button')
-                setPicker(mentionQuery(e.currentTarget.value, caret.current));
-            }}
-          />
-        </div>
+        {clip ? (
+          <span className="chat-audio-caption">试听满意后，再发送</span>
+        ) : (
+          <div className="chat-input-wrap">
+            <input
+              ref={input}
+              aria-label="Chat message"
+              role="combobox"
+              aria-autocomplete="list"
+              aria-expanded={picker?.source === 'input'}
+              aria-activedescendant={
+                picker?.source === 'input' && candidates.length
+                  ? `mention-${candidates[activeChoice].id}`
+                  : undefined
+              }
+              aria-controls="chat-mentions"
+              placeholder={
+                scope === 'private'
+                  ? recipients.length
+                    ? '发送私聊消息…'
+                    : '先选择私聊对象…'
+                  : '说点什么，@ 选择玩家…'
+              }
+              disabled={busy || !!clip}
+              value={text}
+              maxLength={240}
+              onKeyDown={onKey}
+              onChange={(e) => {
+                setText(e.target.value);
+                const pos = e.target.selectionStart ?? 0;
+                caret.current = pos;
+                setPicker(mentionQuery(e.target.value, pos));
+                setChoice(0);
+              }}
+              onSelect={(e) => {
+                caret.current = e.currentTarget.selectionStart ?? 0;
+                if (picker?.source !== 'button')
+                  setPicker(mentionQuery(e.currentTarget.value, caret.current));
+              }}
+            />
+          </div>
+        )}
         <button
-          className="chat-send"
+          className={`chat-send${clip ? ' chat-send-audio' : ''}`}
           disabled={
             !connected ||
             busy ||
             (!clip && !text.trim()) ||
             (scope === 'private' && !recipients.length)
           }
-          aria-label="发送消息"
-          title="发送消息"
+          aria-label={clip ? '发送语音' : '发送消息'}
+          title={clip ? '发送语音' : '发送消息'}
         >
           <svg
             viewBox="0 0 24 24"
@@ -638,6 +651,7 @@ export function ChatPanel({ connection }: { connection: Connection }) {
             <path d="m21 3-6.5 18-4-7.5L3 9.5 21 3Z" />
             <path d="m10.5 13.5 5-5" />
           </svg>
+          {clip && <span>{mode === 'sending' ? '发送中…' : '发送语音'}</span>}
         </button>
       </form>
       <div className="chat-tools">
@@ -653,20 +667,22 @@ export function ChatPanel({ connection }: { connection: Connection }) {
             结束录音
           </button>
         ) : (
-          <>
-            <button
-              disabled={!connected || busy || !!clip}
-              onClick={() => record('text')}
-            >
-              语音转文字
-            </button>
-            <button
-              disabled={!connected || busy || !!clip}
-              onClick={() => record('audio')}
-            >
-              录语音
-            </button>
-          </>
+          !clip && (
+            <>
+              <button
+                disabled={!connected || busy || !!clip}
+                onClick={() => record('text')}
+              >
+                语音转文字
+              </button>
+              <button
+                disabled={!connected || busy || !!clip}
+                onClick={() => record('audio')}
+              >
+                录语音
+              </button>
+            </>
+          )
         )}
         {busy && mode !== 'sending' && <button onClick={cancel}>取消</button>}
         {busy && mode === 'sending' && clip && (
