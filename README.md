@@ -1,19 +1,58 @@
 # Agent Voxel World
 
-Independent local prototype: TypeScript, pnpm workspace, React/Vite, Three.js, Colyseus, PostgreSQL/Prisma.
+独立的本地多人 3D 体素原型：TypeScript · pnpm workspace · React/Vite · Three.js · Node/Colyseus · PostgreSQL/Prisma。
 
-## Start
+## 快速运行
 
-Node 22+, pnpm 10. `pnpm install`, then `pnpm dev`. Web: http://127.0.0.1:5173; server: http://127.0.0.1:2567/health.
-`pnpm check` runs type checks, tests and production web build.
+环境要求：Node 22、pnpm 10、PostgreSQL 17 二进制。macOS 默认使用 `/opt/homebrew/opt/postgresql@17/bin`，其他路径通过 `PG_BIN` 指定。无需 Docker 或云账号。
 
-## Scope and staged delivery
+```sh
+pnpm install --frozen-lockfile
+pnpm db:generate
+pnpm db:start
+pnpm db:migrate
+pnpm dev
+# 另一个终端：
+pnpm agent
+```
 
-1. Workspace and test baseline.
-2. 3D voxel terrain, character controls and block editing.
-3. Authoritative multiplayer, interpolation, chat and reconnect.
-4. PostgreSQL world persistence and migrations.
-5. Structured Agent observation/events and validated actions.
-6. Replaceable voice interface, mock subtitles and interruption.
+打开 http://127.0.0.1:5173 ，用两个独立浏览器上下文输入不同昵称进入。服务只绑定 `127.0.0.1:2567`。`pnpm db:start` 只在本项目 `.data/postgres` 初始化数据库，在端口 55432 启动，创建被 Git 忽略的 `.env`，绝不覆盖已有 `.env`。端口被占用或数据目录没有项目标记时拒绝启动。开发用凭据仅适用于本地测试。
 
-No cloud services, real AI inference, real microphone transport or paid APIs are enabled. Scripted agents and voice mocks are labelled. Secrets stay server-side; never commit `.env`.
+停止前端/服务端用 Ctrl+C；停止独立数据库用 `pnpm db:stop`。再次 `pnpm db:start` 使用原数据。不要删除 `.data`，除非有意丢弃这个原型的世界。
+
+如果没有 `DATABASE_URL`，服务器明确进入 `memory` 模式：刷新页面仍读取活跃房间，但服务重启会丢失编辑。配置了数据库但连接失败时，启动失败，绝不悄悄切成内存模式。
+
+## 操作
+
+- 点击画面锁定鼠标；WASD 移动、Space 跳跃、鼠标转向，Esc 释放。
+- 中央准星选择 6 格以内的方块；左键移除、右键放置。也可使用底部 Remove / Place block 按钮；点击材质卡选择方块。
+- 地形碰撞、重力、速度、编辑距离、基岩保护、玩家占用、相邻支撑和版本冲突均由服务器校验。
+- 右侧聊天同步给世界中的所有玩家。玩家位置以 20Hz 权威更新，画面进行插值。
+- 页面刷新自动使用当前标签页的昵称和重连令牌；异常断线 20 秒内可保留身份，超时或服务器重启则重新入房。
+- Voice Lab 是**文本驱动的语音流程 mock**：显示监听/思考/讲话/空闲/打断状态与模拟字幕。没有麦克风采集、音频播放、音频传输或真实 AI。
+
+## 验证
+
+```sh
+pnpm check             # 类型、规则和语音测试、所有应用构建
+pnpm test:integration  # 需要已启动 PostgreSQL + 应用服务；会临时修改本地世界
+pnpm format:check
+```
+
+集成测试启动两个 SDK 玩家和一个脚本 Agent，检查并发编辑仅一方成功、三方同步、非法动作拒绝、聊天、断线恢复、持久化模式及 mock 字幕打断。真实双浏览器和服务重启记录见 [验证记录](docs/VALIDATION.md)。测试默认修改 `(2,3,1)` 并最终移除该方块；请仅在本测试世界运行。
+
+## 结构
+
+- `apps/web`：React UI、Three.js 实例化体素、插值、重连。
+- `apps/server`：Colyseus 单一权威世界、事务存储、语音 provider 接口。
+- `apps/server/prisma`：PostgreSQL schema 和可重放迁移。
+- `apps/agent`：显式标注的脚本测试 Agent、结构化 SDK、集成检查。
+- `packages/shared`：协议、确定性地形、物理与校验。
+
+## 范围和限制
+
+这是本地单进程、单世界、最多 16 会话的原型，不是完整 Minecraft。地形 25×25、高度上限 15；没有背包、合成、战斗、账户鉴权、反作弊运营、多人分片或生产部署。方块编辑持久化，玩家位置、聊天、事件和语音会话暂不持久化。事件环形缓存保留最近 100 条，观察返回最近 30 条公共事件。
+
+Agent 观察是以自身为中心半径 8 的距离裁剪，最多 500 个最近方块，不做遮挡/视锥裁剪；这是结构化场景接口，并非模型视觉。Agent 与人类共用同一移动和编辑校验。脚本 Agent 没有 LLM，也没有秘密的管理动作。协议见 [接口文档](docs/PROTOCOL.md)。
+
+真实语音接入 Google Vertex 等服务仍需单独授权计费、模型资格、凭据和音频传输。`VOICE_PROVIDER` 当前只接受 `mock`；其他值会拒绝启动。未来凭据必须放服务端环境，不能放 `VITE_*`。本项目未调用付费接口、未推送远程、未部署。

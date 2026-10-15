@@ -15,13 +15,16 @@
     "db:generate": "pnpm --filter @voxel/server exec prisma generate",
     "db:migrate": "pnpm --filter @voxel/server exec dotenv -e ../../.env -- prisma migrate deploy",
     "agent": "pnpm --filter @voxel/agent start",
-    "test:integration": "pnpm --filter @voxel/agent test:integration"
+    "test:integration": "pnpm --filter @voxel/agent test:integration",
+    "format": "prettier --write apps packages scripts tests README.md docs package.json tsconfig.json pnpm-workspace.yaml",
+    "format:check": "prettier --check apps packages scripts tests README.md docs package.json tsconfig.json pnpm-workspace.yaml"
   },
   "devDependencies": {
-    "typescript": "~5.9.3",
-    "tsx": "^4.20.6",
-    "vitest": "^3.2.4",
+    "@types/node": "^22.18.0",
     "concurrently": "^9.2.1",
-    "@types/node": "^22.18.0"
+    "prettier": "3.6.2",
+    "tsx": "^4.20.6",
+    "typescript": "~5.9.3",
+    "vitest": "^3.2.4"
   }
 }

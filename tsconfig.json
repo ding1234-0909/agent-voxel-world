@@ -10,15 +10,8 @@
     "resolveJsonModule": true,
     "allowImportingTsExtensions": true,
     "noEmit": true,
-    "types": [
-      "node"
-    ],
+    "types": ["node"],
     "useDefineForClassFields": false
   },
-  "include": [
-    "apps",
-    "packages",
-    "tests",
-    "scripts"
-  ]
+  "include": ["apps", "packages", "tests", "scripts"]
 }
