@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { REACH, type Block, type Material } from '@voxel/shared';
 import { Connection } from './connection';
+import { VoxelAvatar } from './avatar';
 const colors = {
   grass: 0x6b9c52,
   dirt: 0x9c7353,
@@ -12,7 +13,7 @@ export class WorldScene {
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(70, 1, 0.1, 150);
   private meshes: THREE.InstancedMesh[] = [];
-  private avatars = new Map<string, THREE.Group>();
+  private avatars = new Map<string, VoxelAvatar>();
   private keys = new Set<string>();
   private yaw = 0;
   private pitch = -0.35;
@@ -175,42 +176,32 @@ export class WorldScene {
     for (const [id, avatar] of this.avatars)
       if (!ids.has(id)) {
         this.scene.remove(avatar);
-        avatar.traverse((o) => {
-          if (o instanceof THREE.Mesh) {
-            o.geometry.dispose();
-            o.material.dispose();
-          }
-        });
+        avatar.dispose();
         this.avatars.delete(id);
       }
     for (const p of this.connection.players) {
       if (p.id === self?.id) continue;
       let avatar = this.avatars.get(p.id);
       if (!avatar) {
-        avatar = new THREE.Group();
-        const body = new THREE.Mesh(
-          new THREE.BoxGeometry(0.6, 1, 0.4),
-          new THREE.MeshStandardMaterial({
-            color:
-              p.kind === 'scripted-agent' || p.kind === 'ai-agent'
-                ? 0xefac56
-                : 0x527da2,
-          }),
-        );
-        body.position.y = 0.7;
-        const head = new THREE.Mesh(
-          new THREE.BoxGeometry(0.5, 0.5, 0.5),
-          new THREE.MeshStandardMaterial({ color: 0xe3c8a1 }),
-        );
-        head.position.y = 1.45;
-        avatar.add(body, head);
+        avatar = new VoxelAvatar(p);
         avatar.position.set(p.x, p.y, p.z);
         this.avatars.set(p.id, avatar);
         this.scene.add(avatar);
       }
+      const previousX = avatar.position.x,
+        previousZ = avatar.position.z;
       avatar.position.lerp(
         new THREE.Vector3(p.x, p.y, p.z),
         1 - Math.exp(-12 * dt),
+      );
+      avatar.animate(
+        dt,
+        dt > 0
+          ? Math.hypot(
+              avatar.position.x - previousX,
+              avatar.position.z - previousZ,
+            ) / dt
+          : 0,
       );
       avatar.rotation.y = p.yaw;
       avatar.visible = p.connected;
@@ -253,6 +244,11 @@ export class WorldScene {
     document.removeEventListener('mousemove', this.mousemove);
     this.host.removeEventListener('mousedown', this.mouse);
     this.host.removeEventListener('contextmenu', this.context);
+    for (const avatar of this.avatars.values()) {
+      this.scene.remove(avatar);
+      avatar.dispose();
+    }
+    this.avatars.clear();
     this.scene.traverse((o) => {
       if (o instanceof THREE.Mesh || o instanceof THREE.LineSegments) {
         o.geometry.dispose();
