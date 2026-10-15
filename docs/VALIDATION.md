@@ -11,13 +11,14 @@
 - PostgreSQL 只读查询确认 World(meadow).revision=24，BlockEdit 包含 `(0,3,-5,wood)`；这不是内存模式。
 - 浏览器 Voice Lab 点击 Simulate 后立即 Interrupt，等待 2.1 秒，断言状态仍为 interrupted，通过。
 - 服务器开发进程重启后，Agent 遇到观察超时，自动重新加入；新 sessionId 的观察日志仍报告 revision=24。
-- `git diff --check` 通过。
+- 服务器重启后两个浏览器均恢复连接。Bob 的自动断言确认版本 24 恢复，并保存 `output/playwright/persisted-world.png`。后续世界继续编辑，版本已超过 24；追加断言使用“版本不倒退 + connected + postgresql”，通过。
+- `git diff --check` 和 `pnpm format:check` 通过。
 
 截图保存在被忽略的 `output/playwright/world.png`。原始浏览器快照保存在被忽略的 `.playwright-cli/`，避免将临时会话数据纳入版本库。
 
 ## 验证边界
 
-- 浏览器重启后的自动断言命令一度未返回，最终结果另行补充；不将挂起命令计作通过。
+- 浏览器测试启动器一度等待较久；最终命令成功返回，随后通过已安装的官方 Playwright CLI 复核。
 - 未调用真实语音、麦克风、Google Vertex 或任何付费 AI。
 - 尚未进行跨设备/公网、多进程扩容、16 人负载、长时间压力测试或真实网络丢包模拟。
 - 数据库宕机事务失败路径已实现，尚未单独进行停库故障注入。
@@ -29,5 +30,6 @@
 - `d98b1dc` PostgreSQL、迁移、事务版本、Schema 配置修复。
 - `b2cf9a3` 测试 Agent SDK 与三客户端集成测试。
 - `47956ef` 服务端语音 mock、字幕和打断。
+- `684c9cc` 重连完善、统一格式和运行/协议/验收文档。
 
 没有远程推送、公开部署或全局 Git 配置修改。依赖安装最初遇到官方 npm Prisma 压缩包 ECONNRESET，重试成功。
