@@ -734,7 +734,8 @@ export function AgentManagerPanel({ onClose }: { onClose: () => void }) {
               </label>
               <p className="agent-hint">
                 启动后，目标、附近场景与聊天会发送给所选模型。云端 API
-                按服务商规则计费；每轮最多执行一个动作。
+                按服务商规则计费；每轮规划一个动作。建造支持批量执行或整屋蓝图，约每秒最多
+                8 块，无需逐块调用模型。
                 {agent.continuous
                   ? '持续模式会继续调用模型，直至停止。'
                   : '达到轮数后自动离开。'}
