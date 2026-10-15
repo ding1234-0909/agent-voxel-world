@@ -4,6 +4,7 @@ import type { Connection } from './connection';
 import { LocalRecorder, voiceApi } from './local-recorder';
 import { ClipRecorder } from './clip-recorder';
 import { VoiceDraft } from './VoiceDraft';
+import { AudioPlayer } from './AudioPlayer';
 import { mentionQuery, consumeMention } from './chat-mentions';
 function AudioMessage({
   entry,
@@ -12,9 +13,6 @@ function AudioMessage({
   entry: ChatEntry;
   connection: Connection;
 }) {
-  const [url, setUrl] = useState(''),
-    [error, setError] = useState(''),
-    [loading, setLoading] = useState(false);
   const resource = useRef(''),
     controller = useRef<AbortController | undefined>(undefined);
   useEffect(
@@ -25,45 +23,35 @@ function AudioMessage({
     [],
   );
   const load = async () => {
-    setLoading(true);
-    setError('');
+    if (resource.current) return resource.current;
     const abort = new AbortController();
     controller.current = abort;
-    try {
-      const res = await fetch(
-        `${voiceApi()}/chat/audio/${entry.data.audioId}`,
-        {
-          headers: { Authorization: `Bearer ${connection.chatToken}` },
-          signal: abort.signal,
-        },
-      );
-      if (!res.ok) throw Error('语音已过期或无法访问。');
-      const blob = await res.blob();
-      if (abort.signal.aborted) return;
-      resource.current = URL.createObjectURL(blob);
-      setUrl(resource.current);
-    } catch (e) {
-      if (!abort.signal.aborted) setError((e as Error).message);
-    } finally {
-      if (!abort.signal.aborted) setLoading(false);
-    }
+    const res = await fetch(`${voiceApi()}/chat/audio/${entry.data.audioId}`, {
+      headers: { Authorization: `Bearer ${connection.chatToken}` },
+      signal: abort.signal,
+    });
+    if (!res.ok) throw Error('语音已过期或无法访问。');
+    const blob = await res.blob();
+    if (abort.signal.aborted) throw Error('已取消加载。');
+    resource.current = URL.createObjectURL(blob);
+    return resource.current;
   };
   return (
-    <>
-      {url ? (
-        <audio controls src={url} preload="metadata" />
-      ) : (
-        <button type="button" disabled={loading} onClick={() => void load()}>
-          {loading
-            ? '加载中…'
-            : `▶ 语音 ${(entry.data.durationMs! / 1000).toFixed(1)} 秒`}
-        </button>
-      )}
-      {error && <small role="alert">{error}</small>}
+    <div
+      className={`chat-audio-message${entry.actor === connection.room?.sessionId ? ' is-own' : ''}`}
+    >
+      <AudioPlayer
+        compact
+        loadSource={load}
+        durationMs={entry.data.durationMs ?? 0}
+      />
       {entry.data.transcriptAvailable && (
-        <p className="chat-transcript">{entry.data.text}</p>
+        <details className="chat-transcript">
+          <summary>转文字</summary>
+          <p>{entry.data.text}</p>
+        </details>
       )}
-    </>
+    </div>
   );
 }
 export function ChatPanel({ connection }: { connection: Connection }) {
