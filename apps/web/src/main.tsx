@@ -3,9 +3,8 @@ import { createRoot } from 'react-dom/client';
 import { type Material } from '@voxel/shared';
 import { Connection } from './connection';
 import { WorldScene } from './scene';
-import { VoiceDialog } from './VoiceDialog';
 import { WorldPanel } from './WorldPanel';
-import { AgentManagerPanel } from './AgentManagerPanel';
+import { ControlConsole } from './ControlConsole';
 import { ChatPanel } from './ChatPanel';
 import { SpatialVoicePanel } from './SpatialVoicePanel';
 import './style.css';
@@ -16,16 +15,16 @@ function App() {
   const host = useRef<HTMLDivElement>(null),
     scene = useRef<WorldScene | null>(null);
   const [, render] = useState(0);
-  const [activePanel, setActivePanel] = useState<'players' | 'voice' | null>(
-    null,
-  );
-  const [agentPanel, setAgentPanel] = useState(false);
+  const [activePanel, setActivePanel] = useState<'players' | null>(null);
+  const [consoleEntry, setConsoleEntry] = useState<{
+    initialTab?: 'agents';
+  } | null>(null);
   const [showControls, setShowControls] = useState(false);
-  const openAgents = () => {
+  const openConsole = (initialTab?: 'agents') => {
     if (document.pointerLockElement) document.exitPointerLock();
     window.dispatchEvent(new Event('blur'));
     setActivePanel(null);
-    setAgentPanel(true);
+    setConsoleEntry({ initialTab });
   };
   const [voiceActivity, setVoiceActivity] = useState('idle');
   const [name, setName] = useState(savedName ?? 'Explorer'),
@@ -82,11 +81,25 @@ function App() {
         <div className="status">
           <i className={connection.status === 'connected' ? 'online' : ''} />
           {joined ? connection.status : '游戏大厅'} <span>WORLD 01</span>
-          <button className="exit-game" onClick={openAgents}>
-            Agent 管理
+          <button
+            className="exit-game"
+            aria-haspopup="dialog"
+            aria-expanded={consoleEntry !== null}
+            aria-controls="control-console"
+            onClick={() => openConsole()}
+          >
+            控制台
+            {(
+              {
+                listening: ' · 录音中',
+                transcribing: ' · 识别中',
+                thinking: ' · 回复中',
+                speaking: ' · 朗读中',
+              } as Record<string, string>
+            )[voiceActivity] ?? ''}
           </button>
-          <nav className="game-panels" aria-label="游戏面板">
-            {joined && (
+          {joined && (
+            <nav className="game-panels" aria-label="游戏面板">
               <button
                 aria-expanded={activePanel === 'players'}
                 aria-controls="world-panel"
@@ -96,28 +109,8 @@ function App() {
               >
                 玩家
               </button>
-            )}
-            <button
-              aria-expanded={activePanel === 'voice'}
-              aria-haspopup="dialog"
-              aria-controls="voice-panel"
-              onClick={() => {
-                if (document.pointerLockElement) document.exitPointerLock();
-                window.dispatchEvent(new Event('blur'));
-                setActivePanel(activePanel === 'voice' ? null : 'voice');
-              }}
-            >
-              语音设置
-              {(
-                {
-                  listening: ' · 录音中',
-                  transcribing: ' · 识别中',
-                  thinking: ' · 回复中',
-                  speaking: ' · 朗读中',
-                } as Record<string, string>
-              )[voiceActivity] ?? ''}
-            </button>
-          </nav>
+            </nav>
+          )}
           {joined && (
             <button
               className="exit-game"
@@ -159,7 +152,10 @@ function App() {
               />
               <button>进入世界 ↗</button>
             </form>
-            <button className="join-agents" onClick={openAgents}>
+            <button
+              className="join-agents"
+              onClick={() => openConsole('agents')}
+            >
               创建 Agent 玩家
             </button>
             <small>同一个共享世界 · 真人与 AI 一起创造</small>
@@ -177,9 +173,10 @@ function App() {
           <div className="target">{target}</div>
         </>
       )}
-      <VoiceDialog
-        open={activePanel === 'voice'}
-        onClose={() => setActivePanel(null)}
+      <ControlConsole
+        open={consoleEntry !== null}
+        initialTab={consoleEntry?.initialTab}
+        onClose={() => setConsoleEntry(null)}
         connection={connection}
         onJoin={joinWorld}
         onActivityChange={setVoiceActivity}
@@ -190,7 +187,6 @@ function App() {
           <ChatPanel connection={connection} />
         </div>
       )}
-      {agentPanel && <AgentManagerPanel onClose={() => setAgentPanel(false)} />}
       {joined && (
         <footer>
           <div className="controls">

@@ -1224,40 +1224,7 @@ footer {
 .in-lobby .world-panel .storage {
   margin-top: 8px;
 }
-.voice-dialog {
-  width: min(460px, calc(100vw - 32px));
-  max-height: calc(100dvh - 48px);
-  border: 1px solid #d9e2d1;
-  border-radius: 14px;
-  padding: 26px;
-  color: #263a36;
-  background: #f8f8ef;
-  box-shadow: 0 25px 100px #16382f55;
-}
-.voice-dialog::backdrop {
-  background: #173a335c;
-  backdrop-filter: blur(4px);
-}
-.voice-dialog-heading {
-  display: flex;
-  justify-content: space-between;
-  align-items: start;
-  gap: 16px;
-  margin-bottom: 14px;
-}
-.voice-dialog-heading h2 {
-  font-size: 24px;
-  font-weight: 550;
-  margin: 8px 0;
-}
-.voice-dialog-heading button {
-  padding: 8px 12px;
-  border-radius: 5px;
-  color: #304c40;
-  background: #e4ebdc;
-  font-size: 12px;
-}
-.voice-dialog .voice {
+.console-voice .voice {
   position: static;
   width: 100%;
   max-height: none;
@@ -1265,24 +1232,72 @@ footer {
   padding: 0;
   background: transparent;
 }
-.voice-dialog .voice > .eyebrow {
+.console-voice .voice > .eyebrow {
   display: none;
 }
-.voice-dialog .voice-label {
+.console-voice .voice-label {
   font-size: 12px;
 }
-.voice-dialog .voice select,
-.voice-dialog .voice input {
+.console-voice .voice select,
+.console-voice .voice input {
   padding: 9px;
   font-size: 12px;
 }
-.voice-dialog .voice button {
+.console-voice .voice button {
   padding: 9px 11px;
   font-size: 12px;
 }
-.voice-dialog .voice small {
+.console-voice .voice small {
   font-size: 10px;
   line-height: 1.6;
+}
+.console-section-heading h3 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+.console-section-heading p {
+  margin: 0 0 24px;
+  color: #627767;
+  font-size: 13px;
+}
+.console-voice-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 32px;
+  align-items: start;
+}
+.console-voice-guide {
+  padding: 22px;
+  background: #edf1e7;
+  border: 1px solid #d8e1d2;
+  border-radius: 10px;
+}
+.console-voice-guide h4 {
+  margin: 0 0 16px;
+  font-size: 14px;
+}
+.console-voice-guide p {
+  color: #526d60;
+  font-size: 13px;
+  line-height: 1.8;
+  margin: 0 0 16px;
+}
+.console-voice-guide small {
+  display: block;
+  padding-top: 16px;
+  border-top: 1px solid #d8e1d2;
+  color: #697d70;
+  font-size: 12px;
+  line-height: 1.8;
+}
+@media (max-width: 700px) {
+  .agent-tabs {
+    flex-wrap: wrap;
+  }
+  .console-voice-layout {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
 }
 @media (max-width: 760px) {
   .in-lobby header {

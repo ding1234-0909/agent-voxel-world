@@ -60,4 +60,4 @@ Agent 观察是以自身为中心半径 8 的距离裁剪，最多 500 个最近
 
 ### 在大厅创建 AI 玩家
 
-点击 **Agent 管理 → 模型服务商**，配置 DeepSeek、本机 Ollama 或 OpenAI 兼容接口；再到 **Agent 玩家** 选择服务商与模型，设置任务并点击 **创建并加入世界**。已有 DeepSeek 环境变量会在首次启动管理服务时导入。配置与创建分离，支持多个 Agent 独立运行、查看日志和停止。详见 [AI 玩家接入](docs/AGENT_PLAYERS.md)。
+点击 **控制台 → 模型服务商**，配置 DeepSeek、本机 Ollama 或 OpenAI 兼容接口；再到 **Agent 玩家** 选择服务商与模型，设置任务并点击 **创建并加入世界**。已有 DeepSeek 环境变量会在首次启动管理服务时导入。配置与创建分离，支持多个 Agent 独立运行、查看日志和停止。详见 [AI 玩家接入](docs/AGENT_PLAYERS.md)。
