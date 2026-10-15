@@ -1,0 +1,21 @@
+{
+  "name": "agent-voxel-world",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.6.2",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n server,web \"pnpm --filter @voxel/server dev\" \"pnpm --filter @voxel/web dev\"",
+    "build": "pnpm -r build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "check": "pnpm typecheck && pnpm test && pnpm build"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3",
+    "tsx": "^4.20.6",
+    "vitest": "^3.2.4",
+    "concurrently": "^9.2.1",
+    "@types/node": "^22.18.0"
+  }
+}
