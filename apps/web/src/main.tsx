@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { type Material } from '@voxel/shared';
 import { Connection } from './connection';
 import { WorldScene } from './scene';
-import { VoicePanel } from './VoicePanel';
+import { VoiceDialog } from './VoiceDialog';
 import { WorldPanel } from './WorldPanel';
 import { AgentManagerPanel } from './AgentManagerPanel';
 import './style.css';
@@ -21,6 +21,7 @@ function App() {
   const openAgents = () => {
     if (document.pointerLockElement) document.exitPointerLock();
     window.dispatchEvent(new Event('blur'));
+    setActivePanel(null);
     setAgentPanel(true);
   };
   const [voiceActivity, setVoiceActivity] = useState('idle');
@@ -39,13 +40,12 @@ function App() {
     return () => world.dispose();
   }, []);
   useEffect(() => {
-    if (!joined) return;
     const closePanels = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setActivePanel(null);
     };
     window.addEventListener('keydown', closePanels);
     return () => window.removeEventListener('keydown', closePanels);
-  }, [joined]);
+  }, []);
   const joinWorld = async () => {
     if (connection.status === 'connected') return true;
     const explorerName = name.trim() || 'Explorer';
@@ -76,12 +76,12 @@ function App() {
         </div>
         <div className="status">
           <i className={connection.status === 'connected' ? 'online' : ''} />
-          {connection.status} <span>WORLD 01</span>
+          {joined ? connection.status : '游戏大厅'} <span>WORLD 01</span>
           <button className="exit-game" onClick={openAgents}>
             Agent 管理
           </button>
-          {joined && (
-            <nav className="game-panels" aria-label="游戏面板">
+          <nav className="game-panels" aria-label="游戏面板">
+            {joined && (
               <button
                 aria-expanded={activePanel === 'players'}
                 aria-controls="world-panel"
@@ -91,25 +91,28 @@ function App() {
               >
                 玩家
               </button>
-              <button
-                aria-expanded={activePanel === 'voice'}
-                aria-controls="voice-panel"
-                onClick={() =>
-                  setActivePanel(activePanel === 'voice' ? null : 'voice')
-                }
-              >
-                语音
-                {(
-                  {
-                    listening: ' · 录音中',
-                    transcribing: ' · 识别中',
-                    thinking: ' · 回复中',
-                    speaking: ' · 朗读中',
-                  } as Record<string, string>
-                )[voiceActivity] ?? ''}
-              </button>
-            </nav>
-          )}
+            )}
+            <button
+              aria-expanded={activePanel === 'voice'}
+              aria-haspopup="dialog"
+              aria-controls="voice-panel"
+              onClick={() => {
+                if (document.pointerLockElement) document.exitPointerLock();
+                window.dispatchEvent(new Event('blur'));
+                setActivePanel(activePanel === 'voice' ? null : 'voice');
+              }}
+            >
+              语音设置
+              {(
+                {
+                  listening: ' · 录音中',
+                  transcribing: ' · 识别中',
+                  thinking: ' · 回复中',
+                  speaking: ' · 朗读中',
+                } as Record<string, string>
+              )[voiceActivity] ?? ''}
+            </button>
+          </nav>
           {joined && (
             <button
               className="exit-game"
@@ -121,118 +124,133 @@ function App() {
           )}
         </div>
       </header>
-      <WorldPanel
-        connection={connection}
-        hidden={joined && activePanel !== 'players'}
-        onClose={joined ? () => setActivePanel(null) : undefined}
-      />
-      {!joined && (
-        <div className="join">
-          <div className="eyebrow">STEP INTO THE WORLD</div>
-          <h2>Your next idea starts here.</h2>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              void joinWorld();
-            }}
-          >
-            <label htmlFor="name">Explorer name</label>
-            <input
-              id="name"
-              value={name}
-              maxLength={24}
-              onChange={(e) => setName(e.target.value)}
-              required
-            />
-            <button>Enter world ↗</button>
-          </form>
-          <button className="join-agents" onClick={openAgents}>
-            创建 Agent 玩家 / 配置模型
-          </button>
-          <small>共享世界 · 支持本机模型与云端模型</small>
-        </div>
-      )}
+      <div className="lobby-layout">
+        {!joined && (
+          <div className="join">
+            <div className="eyebrow">THE MEADOW / WORLD 01</div>
+            <h2>
+              把想法，
+              <br />
+              建成一个世界。
+            </h2>
+            <p className="lobby-description">
+              和朋友一起探索、搭建，或邀请 AI 伙伴加入。
+              <br />
+              从这里开始，让这个世界多一点可能。
+            </p>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void joinWorld();
+              }}
+            >
+              <label htmlFor="name">玩家昵称</label>
+              <input
+                id="name"
+                value={name}
+                maxLength={24}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
+              <button>进入世界 ↗</button>
+            </form>
+            <button className="join-agents" onClick={openAgents}>
+              创建 Agent 玩家
+            </button>
+            <small>同一个共享世界 · 真人与 AI 一起创造</small>
+          </div>
+        )}
+        <WorldPanel
+          connection={connection}
+          hidden={joined && activePanel !== 'players'}
+          onClose={joined ? () => setActivePanel(null) : undefined}
+        />
+      </div>
       {joined && (
         <>
           <div className="crosshair">+</div>
           <div className="target">{target}</div>
         </>
       )}
-      <div className="communication">
-        <VoicePanel
-          connection={connection}
-          onJoin={joinWorld}
-          hidden={joined && activePanel !== 'voice'}
-          onClose={joined ? () => setActivePanel(null) : undefined}
-          onActivityChange={setVoiceActivity}
-        />
-        <section className="chat">
-          <div className="eyebrow">WORLD CHAT</div>
-          <div className="messages">
-            {connection.messages.map((m, i) => (
-              <p key={i}>{m}</p>
-            ))}
-          </div>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              connection.action('chat', { text: chat });
-              setChat('');
-            }}
-          >
-            <input
-              aria-label="Chat message"
-              placeholder="Say something…"
-              value={chat}
-              maxLength={240}
-              onChange={(e) => setChat(e.target.value)}
-            />
-            <button disabled={connection.status !== 'connected'}>↗</button>
-          </form>
-        </section>
-      </div>
-      {agentPanel && <AgentManagerPanel onClose={() => setAgentPanel(false)} />}
-      <footer>
-        <div className="controls">
-          <b>W A S D</b> move <b>SPACE</b> jump <b>CLICK</b> look <b>ESC</b>{' '}
-          release
-          <br />
-          <span>
-            Left click removes · Right click places · Aim within 6 blocks
-          </span>
-        </div>
-        <div className="hotbar">
-          {(['grass', 'dirt', 'stone', 'wood'] as Material[]).map((m, i) => (
-            <button
-              key={m}
-              aria-pressed={material === m}
-              onClick={() => {
-                setMaterial(m);
-                if (scene.current) scene.current.material = m;
+      <VoiceDialog
+        open={activePanel === 'voice'}
+        onClose={() => setActivePanel(null)}
+        connection={connection}
+        onJoin={joinWorld}
+        onActivityChange={setVoiceActivity}
+      />
+      {joined && (
+        <div className="communication">
+          <section className="chat">
+            <div className="eyebrow">WORLD CHAT</div>
+            <div className="messages">
+              {connection.messages.map((m, i) => (
+                <p key={i}>{m}</p>
+              ))}
+            </div>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                connection.action('chat', { text: chat });
+                setChat('');
               }}
             >
-              <span className={`swatch ${m}`} />
-              <small>
-                {i + 1} {m}
-              </small>
+              <input
+                aria-label="Chat message"
+                placeholder="Say something…"
+                value={chat}
+                maxLength={240}
+                onChange={(e) => setChat(e.target.value)}
+              />
+              <button disabled={connection.status !== 'connected'}>↗</button>
+            </form>
+          </section>
+        </div>
+      )}
+      {agentPanel && <AgentManagerPanel onClose={() => setAgentPanel(false)} />}
+      {joined && (
+        <footer>
+          <div className="controls">
+            <b>W A S D</b> move <b>SPACE</b> jump <b>CLICK</b> look <b>ESC</b>{' '}
+            release
+            <br />
+            <span>
+              Left click removes · Right click places · Aim within 6 blocks
+            </span>
+          </div>
+          <div className="hotbar">
+            {(['grass', 'dirt', 'stone', 'wood'] as Material[]).map((m, i) => (
+              <button
+                key={m}
+                aria-pressed={material === m}
+                onClick={() => {
+                  setMaterial(m);
+                  if (scene.current) scene.current.material = m;
+                }}
+              >
+                <span className={`swatch ${m}`} />
+                <small>
+                  {i + 1} {m}
+                </small>
+              </button>
+            ))}
+          </div>
+          <div className="build-actions">
+            <button
+              disabled={connection.status !== 'connected'}
+              onClick={() => scene.current?.edit(false)}
+            >
+              Remove
             </button>
-          ))}
-        </div>
-        <div className="build-actions">
-          <button
-            disabled={connection.status !== 'connected'}
-            onClick={() => scene.current?.edit(false)}
-          >
-            Remove
-          </button>
-          <button
-            disabled={connection.status !== 'connected'}
-            onClick={() => scene.current?.edit(true)}
-          >
-            Place block
-          </button>
-        </div>
-      </footer>
+            <button
+              disabled={connection.status !== 'connected'}
+              onClick={() => scene.current?.edit(true)}
+            >
+              Place block
+            </button>
+          </div>
+        </footer>
+      )}
     </main>
   );
 }

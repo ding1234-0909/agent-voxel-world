@@ -106,7 +106,7 @@ export function VoicePanel({
       }
     };
     return () => {
-      connection.onVoice = () => { };
+      connection.onVoice = () => {};
     };
   }, [connection, speech, recorder, lang, readAloud]);
   useEffect(

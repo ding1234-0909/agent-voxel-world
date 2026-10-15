@@ -901,3 +901,223 @@ footer {
     justify-content: end;
   }
 }
+
+/* The lobby has its own layout; game HUD only mounts after joining. */
+.lobby-layout {
+  display: contents;
+}
+.in-lobby {
+  overflow-y: auto;
+}
+.in-lobby::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(135deg, #d9eeebd9, #bbdcd7b8 55%, #a1ccc7b8);
+}
+.in-lobby header {
+  position: relative;
+  z-index: 1;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 30px 40px;
+  align-items: center;
+  gap: 20px;
+}
+.in-lobby .lobby-layout {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.9fr);
+  gap: 28px;
+  align-items: center;
+  width: min(960px, calc(100% - 80px));
+  min-height: calc(100dvh - 116px);
+  padding: 24px 0 64px;
+  margin: 0 auto;
+}
+.in-lobby .join {
+  position: static;
+  transform: none;
+  width: auto;
+  padding: 42px;
+  border: 1px solid #ffffff80;
+  border-radius: 16px;
+  background: #f8f8f0f5;
+  box-shadow: 0 20px 70px #2d615119;
+}
+.in-lobby .join h2 {
+  font:
+    500 40px/1.3 ui-sans-serif,
+    system-ui,
+    sans-serif;
+  letter-spacing: -1.5px;
+  margin: 25px 0 18px;
+}
+.lobby-description {
+  color: #688074;
+  font-size: 13px;
+  line-height: 1.9;
+  margin: 0 0 30px;
+}
+.in-lobby .join label {
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+.in-lobby .join input {
+  padding: 13px 14px;
+  border-radius: 6px;
+}
+.in-lobby .join button {
+  border-radius: 6px;
+  padding: 14px;
+  margin: 12px 0 10px;
+}
+.in-lobby .join .join-agents {
+  margin-top: 0;
+  margin-bottom: 24px;
+}
+.in-lobby .join small {
+  font-size: 10px;
+  color: #748779;
+}
+.in-lobby .world-panel {
+  position: static;
+  width: auto;
+  max-height: none;
+  padding: 28px;
+  border-radius: 14px;
+  background: #f2f7ecbc;
+  box-shadow: none;
+}
+.in-lobby .world-panel h1 {
+  font-size: 23px;
+  margin: 19px 0 12px;
+}
+.in-lobby .world-panel .stats {
+  padding: 20px 0 10px;
+  margin: 4px 0;
+}
+.in-lobby .world-panel .stats strong {
+  font-size: 32px;
+}
+.in-lobby .world-panel .player-list {
+  max-height: 230px;
+}
+.in-lobby .world-panel .player {
+  padding: 0 0 10px;
+}
+.in-lobby .world-panel .storage {
+  margin-top: 8px;
+}
+.voice-dialog {
+  width: min(460px, calc(100vw - 32px));
+  max-height: calc(100dvh - 48px);
+  border: 1px solid #d9e2d1;
+  border-radius: 14px;
+  padding: 26px;
+  color: #263a36;
+  background: #f8f8ef;
+  box-shadow: 0 25px 100px #16382f55;
+}
+.voice-dialog::backdrop {
+  background: #173a335c;
+  backdrop-filter: blur(4px);
+}
+.voice-dialog-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+.voice-dialog-heading h2 {
+  font-size: 24px;
+  font-weight: 550;
+  margin: 8px 0;
+}
+.voice-dialog-heading button {
+  padding: 8px 12px;
+  border-radius: 5px;
+  color: #304c40;
+  background: #e4ebdc;
+  font-size: 12px;
+}
+.voice-dialog .voice {
+  position: static;
+  width: 100%;
+  max-height: none;
+  overflow: visible;
+  padding: 0;
+  background: transparent;
+}
+.voice-dialog .voice > .eyebrow {
+  display: none;
+}
+.voice-dialog .voice-label {
+  font-size: 12px;
+}
+.voice-dialog .voice select,
+.voice-dialog .voice input {
+  padding: 9px;
+  font-size: 12px;
+}
+.voice-dialog .voice button {
+  padding: 9px 11px;
+  font-size: 12px;
+}
+.voice-dialog .voice small {
+  font-size: 10px;
+  line-height: 1.6;
+}
+@media (max-width: 760px) {
+  .in-lobby header {
+    padding: 22px 24px;
+    flex-wrap: wrap;
+  }
+  .in-lobby .status {
+    gap: 7px;
+  }
+  .in-lobby .lobby-layout {
+    width: calc(100% - 48px);
+    min-height: auto;
+    grid-template-columns: 1fr;
+    gap: 20px;
+    padding-top: 12px;
+    padding-bottom: 32px;
+  }
+  .in-lobby .join {
+    padding: 30px;
+  }
+  .in-lobby .join h2 {
+    font-size: 34px;
+  }
+  .in-lobby .world-panel {
+    padding: 24px 30px;
+  }
+  .in-lobby .world-panel .stats {
+    justify-content: start;
+    gap: 60px;
+  }
+}
+@media (max-width: 420px) {
+  .in-lobby header {
+    padding: 20px;
+  }
+  .in-lobby .status {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .in-lobby .status .exit-game {
+    margin-left: auto;
+  }
+  .in-lobby .lobby-layout {
+    width: calc(100% - 32px);
+  }
+  .in-lobby .join {
+    padding: 26px;
+  }
+  .in-lobby .join h2 {
+    font-size: 30px;
+  }
+}
