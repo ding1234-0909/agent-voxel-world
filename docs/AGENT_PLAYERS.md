@@ -25,13 +25,17 @@ DeepSeek 玩家复用 `apps/agent/src/session.ts`，通过 OpenAI 官方 Node SD
 3. 设置昵称、目标和推理参数。运行方式可选 **限定轮数** 或 **持续运行（永久）**；轮询可选 **固定间隔** 或 **随机区间**（默认 4000–8000 毫秒）。每轮推理和动作结束后再等待，随机模式每轮重新抽取时间，不并发推理。DeepSeek 支持开关思考模式、推理强度和输出 token 上限。方块修改默认关闭。
 4. 点击 **创建并加入世界**。Agent 以 `ai-agent` 身份加入同一个世界，玩家列表与在线代理数量实时更新。右侧显示状态和运行记录，可随时停止。
 
-最多同时运行 4 个由控制台管理的 Agent；不同 Agent 可以使用不同服务商/模型。关闭面板、退出真人游戏不会停止 Agent，点击 **停止 Agent** 即可取消等待和推理并退出；限定轮数模式在达到上限后自动退出，持续模式忽略轮数上限。终止性模型错误、连续三次失败也会停止。服务关闭会停止全部受管理的 Agent；重启后不会自动恢复运行。旧的命令行 Agent 独立管理，只出现在世界玩家列表中。
+最多同时在线 4 个由控制台管理的 Agent（含待命）；不同 Agent 可以使用不同服务商/模型。限定轮数结束后进入 **在线待命**，保留角色、位置、配置和运行记录，不再调用模型。点击 **继续运行** 再执行一批相同轮数，沿用当前会话的上下文和未完成蓝图；点击 **更换任务** 可输入新目标，用同一个角色执行，新目标会重置上一任务的推理上下文。持续模式一直执行，直到关闭或任务异常。
+
+只有 **关闭 Agent** 才主动取消等待和推理并离开世界；关闭面板、退出真人游戏都不会关闭 Agent。任务异常会停止推理，已连接角色仍留在世界，允许重试；网络断开则显示异常，可用同一记录重新加入。关闭后的记录也可点击 **重新加入并运行** 复用配置，重新加入会产生新的游戏会话和出生位置。
+
+Agent 记录保存在 `.data/agent-providers.json.agents.json`，权限 `0600`，不包含 API Key。服务重启后，原先在线的 Agent 自动重新加入并待命，不自动调用模型；之前明确关闭的 Agent 保持关闭。游戏会话、位置及临时推理上下文不会跨服务重启保留，场景方块是否持久化取决于世界存储配置。最多保存 50 条记录，达到上限时仅清理已关闭的旧记录。旧的命令行 Agent 仍独立管理，其限定轮数结束后退出的行为不变。
 
 服务商保存在本机 `.data/agent-providers.json`（文件权限 `0600`，未加密，请勿分享或提交）。首次启动自动导入 `DEEPSEEK_API_KEY` / `DEEPSEEK_MODEL` / `OLLAMA_MODEL`；已有配置文件后以控制台保存值为准，修改 `.env` 不会覆盖它。页面仅收到 `hasApiKey` 状态；编辑时留空保留密钥。更换地址域名或服务类型必须重新填写密钥。删除服务商不会删除世界方块。
 
 通用服务必须兼容 OpenAI **Chat Completions** 和模型的 JSON 动作输出，原生 Anthropic/Responses 等接口尚未接入。可在兼容设置中关闭 `response_format`，或选择 `max_completion_tokens`。DeepSeek 专用思考字段不会发给其他服务商。本机 Ollama 使用 `http://127.0.0.1:11434/v1`，先在 Ollama 下载模型，再获取列表；配置 Ollama 失败不影响使用 DeepSeek。[Ollama 官方兼容接口说明](https://docs.ollama.com/api/openai-compatibility)。
 
-管理 API 仅接受 `WEB_ORIGIN` 指定页面的 Origin，世界服务仍只绑定本机。`GET /agents/providers` 返回脱敏配置，`POST/PUT/DELETE /agents/providers[/id]` 管理服务商，`GET /agents/providers/:id/models` 查询模型，`GET/POST /agents` 查看/创建玩家，`POST /agents/:id/stop` 停止。写请求使用 JSON。它是本机原型的管理接口，不应直接暴露到公网。
+管理 API 仅接受 `WEB_ORIGIN` 指定页面的 Origin，世界服务仍只绑定本机。`GET /agents/providers` 返回脱敏配置，`POST/PUT/DELETE /agents/providers[/id]` 管理服务商，已有可复用 Agent 关联的服务商不能删除。`GET /agents/providers/:id/models` 查询模型，`GET/POST /agents` 查看/创建玩家，`POST /agents/:id/resume` 继续运行（可传 `goal` 更换任务），`POST /agents/:id/stop` 关闭并离开。写请求使用 JSON。它是本机原型的管理接口，不应直接暴露到公网。
 
 ## DeepSeek 命令行（仍可使用）
 

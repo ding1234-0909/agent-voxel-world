@@ -6,6 +6,7 @@ import type {
   ProviderView,
 } from '@voxel/shared';
 import { voiceApi } from './local-recorder';
+import { readAgentResponse } from './agent-response';
 
 async function api<T>(
   path: string,
@@ -20,10 +21,7 @@ async function api<T>(
       body === undefined ? undefined : { 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  if (response.status === 204) return undefined as T;
-  const data = await response.json();
-  if (!response.ok) throw Error(data.error || '请求失败，请稍后重试。');
-  return data as T;
+  return readAgentResponse<T>(response);
 }
 const presets = {
   deepseek: {
@@ -48,10 +46,11 @@ const freshProvider = (type: ProviderType = 'compatible') => ({
 const statusNames: Record<ManagedAgentView['status'], string> = {
   joining: '加入中',
   running: '运行中',
+  idle: '在线待命',
   stopping: '停止中',
-  stopped: '已停止',
-  completed: '已完成',
-  failed: '运行失败',
+  stopped: '已关闭',
+  completed: '任务已结束',
+  failed: '任务异常',
 };
 const isActive = (job: ManagedAgentView) =>
   ['joining', 'running', 'stopping'].includes(job.status);
@@ -77,6 +76,7 @@ export function AgentManagerPanel({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<'agents' | 'providers'>('agents');
   const [providers, setProviders] = useState<ProviderView[]>([]);
   const [jobs, setJobs] = useState<ManagedAgentView[]>([]);
+  const [taskDraft, setTaskDraft] = useState<{ id: string; goal: string }>();
   const [agent, setAgent] = useState(initialAgent);
   const [editing, setEditing] = useState<string>();
   const [draft, setDraft] = useState(freshProvider());
@@ -247,7 +247,11 @@ export function AgentManagerPanel({ onClose }: { onClose: () => void }) {
             setNotice('');
           }}
         >
-          Agent 玩家 <small>{jobs.filter(isActive).length} 运行中</small>
+          Agent 玩家{' '}
+          <small>
+            {jobs.filter(isActive).length} 运行中 ·{' '}
+            {jobs.filter((j) => j.status === 'idle').length} 待命
+          </small>
         </button>
         <button
           aria-pressed={tab === 'providers'}
@@ -395,7 +399,8 @@ export function AgentManagerPanel({ onClose }: { onClose: () => void }) {
               </details>
               <p className="agent-hint">
                 支持 OpenAI Chat Completions
-                兼容接口。保存配置不会启动推理；更改仅用于新创建的 Agent。
+                兼容接口。保存配置不会启动推理；新建或继续运行 Agent
+                时使用最新配置。
               </p>
               <div className="agent-actions">
                 <button className="primary">
@@ -562,7 +567,7 @@ export function AgentManagerPanel({ onClose }: { onClose: () => void }) {
               </div>
               {agent.continuous && (
                 <p className="agent-hint">
-                  持续运行，直到手动停止、服务关闭或发生终止错误。服务重启后不会自动恢复。
+                  持续运行，直到手动关闭或发生终止错误。服务重启后恢复待命，点击继续运行才会调用模型。
                 </p>
               )}
               <label>
@@ -738,7 +743,7 @@ export function AgentManagerPanel({ onClose }: { onClose: () => void }) {
                 8 块，无需逐块调用模型。
                 {agent.continuous
                   ? '持续模式会继续调用模型，直至停止。'
-                  : '达到轮数后自动离开。'}
+                  : '达到轮数后留在世界待命，点击继续运行可复用。'}
               </p>
               <button
                 className="primary"
@@ -753,11 +758,12 @@ export function AgentManagerPanel({ onClose }: { onClose: () => void }) {
           </form>
           <section className="agent-runs" aria-label="Agent 运行状态">
             <h3>
-              世界里的 Agent <small>最多同时运行 4 个</small>
+              世界里的 Agent <small>最多同时在线 4 个（含待命）</small>
             </h3>
             <p className="agent-hint">
               这里显示通过控制台创建的
-              Agent。真人无需先进入游戏；关闭面板不会停止 Agent。
+              Agent。轮数结束后留在世界待命，不再调用模型；只有关闭 Agent
+              才会离开。关闭面板不影响 Agent。
             </p>
             {pollError && (
               <p role="alert" className="agent-error">
@@ -797,7 +803,78 @@ export function AgentManagerPanel({ onClose }: { onClose: () => void }) {
                   <p>{job.goal}</p>
                   <pre>{job.logs.join('\n') || '正在连接世界…'}</pre>
                 </details>
-                {isActive(job) && (
+                {!isActive(job) && (
+                  <div className="agent-job-actions">
+                    <button
+                      disabled={busy}
+                      onClick={() =>
+                        void perform(async () => {
+                          await api(
+                            `/${encodeURIComponent(job.id)}/resume`,
+                            'POST',
+                            {},
+                          );
+                          setJobs(await api<ManagedAgentView[]>(''));
+                        })
+                      }
+                    >
+                      {job.sessionId ? '继续运行' : '重新加入并运行'}
+                    </button>
+                    <button
+                      disabled={busy}
+                      onClick={() =>
+                        setTaskDraft({ id: job.id, goal: job.goal })
+                      }
+                    >
+                      更换任务
+                    </button>
+                  </div>
+                )}
+                {taskDraft?.id === job.id && !isActive(job) && (
+                  <form
+                    className="agent-task-form"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      void perform(async () => {
+                        await api(
+                          `/${encodeURIComponent(job.id)}/resume`,
+                          'POST',
+                          { goal: taskDraft.goal },
+                        );
+                        setTaskDraft(undefined);
+                        setJobs(await api<ManagedAgentView[]>(''));
+                      });
+                    }}
+                  >
+                    <label>
+                      新任务目标
+                      <textarea
+                        aria-label={`${job.name}的新任务目标`}
+                        maxLength={2000}
+                        required
+                        value={taskDraft.goal}
+                        onChange={(e) =>
+                          setTaskDraft({ ...taskDraft, goal: e.target.value })
+                        }
+                      />
+                    </label>
+                    <div className="agent-job-actions">
+                      <button disabled={busy || !taskDraft.goal.trim()}>
+                        开始新任务
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTaskDraft(undefined)}
+                      >
+                        取消
+                      </button>
+                    </div>
+                  </form>
+                )}
+                {(isActive(job) ||
+                  job.sessionId ||
+                  job.status === 'idle' ||
+                  job.status === 'failed') && (
                   <button
                     disabled={busy || job.status === 'stopping'}
                     onClick={() =>
@@ -811,7 +888,7 @@ export function AgentManagerPanel({ onClose }: { onClose: () => void }) {
                       })
                     }
                   >
-                    停止 Agent
+                    关闭 Agent
                   </button>
                 )}
               </article>

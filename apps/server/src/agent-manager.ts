@@ -14,6 +14,7 @@ import {
   listModels,
   runAgent,
   type AgentConfig,
+  type AgentRunState,
 } from '../../agent/src/deepseek';
 
 export class ManagementError extends Error {
@@ -293,13 +294,79 @@ type Job = {
   abort: AbortController;
   session?: Session;
   done?: Promise<void>;
+  memory: AgentRunState;
 };
 const active = (status: ManagedAgentView['status']) =>
   ['joining', 'running', 'stopping'].includes(status);
+const resident = (job: Job) => !!job.session || active(job.view.status);
 export class AgentManager {
   private jobs = new Map<string, Job>();
   private closing = false;
   private probing = new Set<string>();
+  private saving: Promise<void> = Promise.resolve();
+  private get archivePath() {
+    return `${this.providers.path}.agents.json`;
+  }
+  private persist() {
+    if (this.closing) return;
+    const data = JSON.stringify(
+      this.list()
+        .reverse()
+        .map((view) => ({ ...view, sessionId: undefined })),
+      null,
+      2,
+    );
+    this.saving = this.saving
+      .catch(() => {})
+      .then(async () => {
+        const temp = `${this.archivePath}.tmp`;
+        await writeFile(temp, data, { mode: 0o600 });
+        await rename(temp, this.archivePath);
+      });
+    void this.saving.catch(() => console.error('无法保存 Agent 记录。'));
+  }
+  async load() {
+    let saved: ManagedAgentView[];
+    try {
+      saved = JSON.parse(await readFile(this.archivePath, 'utf8'));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+      throw new ManagementError('无法读取 Agent 记录。', 500);
+    }
+    if (!Array.isArray(saved) || saved.length > 50)
+      throw new ManagementError('Agent 记录格式无效。', 500);
+    for (const view of saved) {
+      const provider = this.providers.get(view.providerId);
+      const settings = validateAgent(view, provider);
+      if (typeof view.id !== 'string' || !/^[a-zA-Z0-9-]{1,80}$/.test(view.id))
+        throw new ManagementError('Agent 标识无效。', 500);
+      const job: Job = {
+        view: {
+          ...settings,
+          id: view.id,
+          createdAt: view.createdAt,
+          providerName: provider.name,
+          status: 'stopped',
+          logs: Array.isArray(view.logs)
+            ? view.logs.filter((x) => typeof x === 'string').slice(-40)
+            : [],
+        },
+        abort: new AbortController(),
+        memory: {},
+      };
+      this.jobs.set(view.id, job);
+      if (
+        ['idle', 'running', 'joining', 'failed'].includes(view.status) &&
+        [...this.jobs.values()].filter(resident).length < 4
+      ) {
+        job.view.status = 'joining';
+        job.done = this.execute(job, provider, false);
+        await job.done;
+      }
+    }
+    this.persist();
+    await this.saving;
+  }
   constructor(
     readonly providers: ProviderStore,
     private serverUrl: string,
@@ -340,17 +407,21 @@ export class AgentManager {
       text(object(value).providerId, '服务商', 80),
     );
     const settings = validateAgent(value, provider);
-    if (
-      [...this.jobs.values()].filter((j) => active(j.view.status)).length >= 4
-    )
+    if ([...this.jobs.values()].filter(resident).length >= 4)
       throw new ManagementError(
-        '最多同时运行 4 个受管理的 Agent，请先停止一个。',
+        '最多同时在线 4 个受管理的 Agent（含待命），请先关闭一个。',
         409,
       );
     for (const [id, job] of this.jobs) {
       if (this.jobs.size < 50) break;
-      if (!active(job.view.status)) this.jobs.delete(id);
+      if (!resident(job) && ['stopped', 'completed'].includes(job.view.status))
+        this.jobs.delete(id);
     }
+    if (this.jobs.size >= 50)
+      throw new ManagementError(
+        '最多保存 50 个 Agent，请先关闭不再使用的 Agent。',
+        409,
+      );
     const job: Job = {
       view: {
         ...settings,
@@ -361,39 +432,88 @@ export class AgentManager {
         logs: [],
       },
       abort: new AbortController(),
+      memory: {},
     };
     this.jobs.set(job.view.id, job);
     job.done = this.execute(job, provider);
+    this.persist();
     return { ...job.view, logs: [...job.view.logs] };
   }
-  private async execute(job: Job, provider: SavedProvider) {
+  resume(id: string, value: unknown = {}) {
+    if (this.closing) throw new ManagementError('世界服务正在关闭。', 503);
+    const job = this.jobs.get(id);
+    if (!job) throw new ManagementError('Agent 不存在。', 404);
+    if (active(job.view.status))
+      throw new ManagementError('Agent 正在运行或关闭，请稍候。', 409);
+    const input = object(value);
+    const provider = this.providers.get(job.view.providerId);
+    const settings = validateAgent(
+      { ...job.view, goal: input.goal ?? job.view.goal },
+      provider,
+    );
+    if (!job.session && [...this.jobs.values()].filter(resident).length >= 4)
+      throw new ManagementError('最多同时在线 4 个 Agent，请先关闭一个。', 409);
+    if (settings.goal !== job.view.goal) job.memory = {};
+    Object.assign(job.view, settings, {
+      providerName: provider.name,
+      status: job.session ? 'running' : 'joining',
+    });
+    job.abort = new AbortController();
+    job.done = this.execute(job, provider);
+    this.persist();
+    return { ...job.view, logs: [...job.view.logs] };
+  }
+  private async execute(job: Job, provider: SavedProvider, run = true) {
     const log = (message: string) => {
       // Configurable providers/nicknames can contain user input; never return the key.
       const safe = provider.apiKey
         ? message.split(provider.apiKey).join('[已隐藏]')
         : message;
       job.view.logs = [...job.view.logs, safe].slice(-40);
+      this.persist();
     };
-    let finalStatus: ManagedAgentView['status'] = 'completed';
+    let finalStatus: ManagedAgentView['status'] = 'idle';
     try {
       const config: AgentConfig = { ...job.view, apiKey: provider.apiKey };
-      job.session = this.dependencies.session(this.serverUrl);
-      await job.session.join(job.view.name, 'ai-agent');
-      job.view.sessionId = job.session.room.sessionId;
-      if (!job.abort.signal.aborted) {
-        job.view.status = 'running';
+      if (!job.session) {
+        const session = this.dependencies.session(this.serverUrl);
+        job.session = session;
+        await session.join(job.view.name, 'ai-agent');
+        job.view.sessionId = session.room.sessionId;
+        session.room.onLeave(() => {
+          if (job.session !== session) return;
+          job.session = undefined;
+          delete job.view.sessionId;
+          job.abort.abort();
+          if (job.view.status !== 'stopping') {
+            job.view.status = 'failed';
+            log('世界连接已断开，可点击继续运行重新加入。');
+          }
+          this.persist();
+        });
         log('已加入世界。');
+      }
+      if (!job.abort.signal.aborted && run) {
+        job.view.status = 'running';
+        log('开始新一轮任务。');
         await runAgent(
           job.session,
           this.dependencies.planner(config, provider),
           config,
           job.abort.signal,
           log,
+          job.memory,
         );
       }
-      finalStatus = job.abort.signal.aborted ? 'stopped' : 'completed';
+      finalStatus = job.abort.signal.aborted ? 'failed' : 'idle';
+      if (finalStatus === 'idle')
+        log(
+          run
+            ? '本轮任务结束，留在世界待命；继续运行前不会调用模型。'
+            : '服务恢复，已回到世界待命；请手动继续运行。',
+        );
     } catch (error) {
-      finalStatus = job.abort.signal.aborted ? 'stopped' : 'failed';
+      finalStatus = 'failed';
       if (!job.abort.signal.aborted)
         log(
           error instanceof DeepSeekError
@@ -401,35 +521,54 @@ export class AgentManager {
             : '无法加入世界或执行动作，请检查世界连接和模型配置。',
         );
     } finally {
-      await job.session
-        ?.close()
-        .catch(() => job.session?.room?.connection.close());
-      job.view.status = job.abort.signal.aborted ? 'stopped' : finalStatus;
+      if (!job.view.sessionId) {
+        await job.session
+          ?.close()
+          .catch(() => job.session?.room?.connection.close());
+        job.session = undefined;
+      }
+      if (job.view.status !== 'stopping') job.view.status = finalStatus;
+      this.persist();
     }
   }
   stop(id: string) {
     const job = this.jobs.get(id);
     if (!job) throw new ManagementError('Agent 不存在。', 404);
-    if (active(job.view.status)) {
+    if (
+      job.view.status !== 'stopping' &&
+      (resident(job) || job.view.status !== 'stopped')
+    ) {
       job.view.status = 'stopping';
       job.abort.abort();
-      void job.session
+      const closed = job.session
         ?.close()
         .catch(() => job.session?.room?.connection.close());
+      const previous = job.done;
+      job.done = (async () => {
+        await Promise.allSettled([previous, closed]);
+        await job.session
+          ?.close()
+          .catch(() => job.session?.room?.connection.close());
+        job.session = undefined;
+        delete job.view.sessionId;
+        job.view.status = 'stopped';
+        this.persist();
+      })();
     }
     return { ...job.view, logs: [...job.view.logs] };
   }
   async removeProvider(id: string) {
-    if (
-      [...this.jobs.values()].some(
-        (j) => j.view.providerId === id && active(j.view.status),
-      )
-    )
-      throw new ManagementError('请先停止使用该服务商的 Agent。', 409);
+    if ([...this.jobs.values()].some((j) => j.view.providerId === id))
+      throw new ManagementError(
+        '已有可复用 Agent 关联此服务商，请保留配置或更新其密钥。',
+        409,
+      );
     await this.providers.remove(id);
   }
   async close() {
+    this.persist();
     this.closing = true;
+    await this.saving;
     for (const id of this.jobs.keys()) this.stop(id);
     await Promise.allSettled([...this.jobs.values()].map((j) => j.done));
   }

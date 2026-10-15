@@ -11,6 +11,7 @@ import { AgentManager, ProviderStore } from './agent-manager';
 import { installAgentRoutes } from './agent-routes';
 import { Session, until } from '../../agent/src/session';
 import { ModelPlanner } from '../../agent/src/deepseek';
+import type { ManagedAgentView } from '@voxel/shared';
 process.env.DATABASE_URL = '';
 process.env.VOICE_PROVIDER = 'mock';
 process.env.WEB_ORIGIN = 'http://127.0.0.1:5187';
@@ -79,6 +80,12 @@ try {
   );
   assert.equal((await fetch(`${url}/agents/providers`)).status, 403);
   assert.equal((await api('/providers', 'OPTIONS')).status, 204);
+  const missingRoute = await api('/missing/endpoint', 'POST', {});
+  assert.equal(missingRoute.status, 404);
+  assert.equal(typeof (await missingRoute.json()).error, 'string');
+  const missingAgent = await api('/nonexistent/resume', 'POST', {});
+  assert.equal(missingAgent.status, 404);
+  assert.equal(typeof (await missingAgent.json()).error, 'string');
   const publicProviders = await (await api('/providers')).text();
   assert(!publicProviders.includes('fixture-secret'));
   assert(publicProviders.includes('hasApiKey'));
@@ -121,18 +128,54 @@ try {
     assert.equal(response.status, 201);
     const job = (await response.json()) as { id: string };
     await until(
-      () =>
-        manager!.list().find((j) => j.id === job.id)?.status === 'completed',
+      () => manager!.list().find((j) => j.id === job.id)?.status === 'idle',
     );
-    assert.equal(room.state.players.size, 0);
+    assert.equal(
+      room.state.players.size,
+      1,
+      'completed rounds keep the player online',
+    );
+    const idle: ManagedAgentView = manager.list().find((j) => j.id === job.id)!;
+    const original = room.state.players.get(idle.sessionId!)!;
+    const originalPosition = { x: original.x, y: original.y, z: original.z };
+    assert.equal(
+      (await api(`/${job.id}/resume`, 'POST', { goal: 'A different task' }))
+        .status,
+      200,
+    );
+    await until(
+      () => manager!.list().find((j) => j.id === job.id)?.status === 'idle',
+    );
+    const resumed: ManagedAgentView = manager
+      .list()
+      .find((j) => j.id === job.id)!;
+    assert.equal(resumed.sessionId, idle.sessionId);
+    assert.equal(resumed.goal, 'A different task');
+    const current = room.state.players.get(resumed.sessionId!)!;
+    assert.deepEqual(
+      { x: current.x, y: current.y, z: current.z },
+      originalPosition,
+    );
     assert(
       manager
         .list()
         .find((j) => j.id === job.id)
         ?.logs.some((s) => s.includes('chat')),
     );
+    const callsWhenIdle: number = calls;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal(calls, callsWhenIdle, 'idle does not invoke the model');
+    assert.equal((await api(`/${job.id}/stop`, 'POST', {})).status, 200);
+    await until(
+      () => manager!.list().find((j) => j.id === job.id)?.status === 'stopped',
+    );
+    assert.equal(room.state.players.size, 0);
+    assert(
+      manager.list().some((j) => j.id === job.id),
+      'closing retains reusable config',
+    );
   }
-  assert.equal(calls, 2);
+  assert.equal(calls, 4);
   const created = [] as string[];
   for (let i = 0; i < 4; i++) {
     const res = await api('', 'POST', {
@@ -195,8 +238,34 @@ try {
       .list()
       .every((j) => !['joining', 'running', 'stopping'].includes(j.status)),
   );
+  const beforeRestore = calls;
+  manager = new AgentManager(store, url.replace('http', 'ws'), {
+    session: (url) => new Session(url),
+    planner: (config, provider) => new ModelPlanner(config, request, provider),
+    models: async () => ['fixture-model'],
+  });
+  await manager.load();
+  assert.equal(calls, beforeRestore, 'restoration never spends inference');
+  assert.equal(room.state.players.size, 3);
+  assert.equal(manager.list().filter((j) => j.status === 'idle').length, 3);
+  const stopped = manager.list().find((j) => j.id === created[0])!;
+  assert.equal(stopped.status, 'stopped');
+  manager.resume(stopped.id);
+  assert.throws(() => manager!.resume(stopped.id), /正在运行/);
+  await until(
+    () =>
+      manager!.list().find((j) => j.id === stopped.id)?.status === 'running',
+  );
+  assert.equal(room.state.players.size, 4);
+  assert.throws(
+    () =>
+      manager!.create({ providerId: 'deepseek', name: 'overflow', goal: 'Hi' }),
+    /最多同时在线/,
+  );
+  for (const j of manager.list().filter((j) => j.sessionId)) manager.stop(j.id);
+  await until(() => room.state.players.size === 0);
   console.log(
-    'PASS: origin guard, credential redaction, input limits, provider CRUD/model discovery, multi-provider managed AI join/chat/exit, concurrency limit, explicit stop and shutdown cleanup. Model responses are fixtures.',
+    'PASS: origin guard, credential redaction, round completion stays online, reuse preserves player identity/position, task replacement, idle spends no inference, close/rejoin, online capacity and restart restoration without inference. Model responses are fixtures.',
   );
 } finally {
   await manager?.close();

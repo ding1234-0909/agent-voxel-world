@@ -1394,6 +1394,27 @@ footer {
   display: block;
   min-height: 1.6em;
 }
+.agent-job-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+.agent-task-form {
+  margin: 12px 0;
+  padding-top: 12px;
+  border-top: 1px solid #d9e1d3;
+}
+.agent-task-form textarea {
+  width: 100%;
+  min-height: 80px;
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid #cbd5c8;
+  border-radius: 6px;
+  font: inherit;
+  resize: vertical;
+}
 @media (max-width: 700px) {
   .in-game .communication {
     width: min(310px, calc(100vw - 32px));

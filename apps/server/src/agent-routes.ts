@@ -81,9 +81,18 @@ export function installAgentRoutes(app: Express, manager: AgentManager) {
     route((req, res) => res.status(201).json(manager.create(req.body))),
   );
   app.post(
+    '/agents/:id/resume',
+    route((req, res) =>
+      res.json(manager.resume(String(req.params.id), req.body)),
+    ),
+  );
+  app.post(
     '/agents/:id/stop',
     route((req, res) => res.json(manager.stop(String(req.params.id)))),
   );
+  app.use('/agents', (_req, res) => {
+    res.status(404).json({ error: 'Agent 接口不存在，请确认前后端版本一致。' });
+  });
   const errors: ErrorRequestHandler = (error, _req, res, _next) => {
     if (error instanceof ManagementError)
       res.status(error.status).json({ error: error.message });

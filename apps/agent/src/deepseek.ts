@@ -403,17 +403,23 @@ export function agentChatContext(observation: Observation) {
     ),
   };
 }
+export type AgentRunState = {
+  previous?: unknown;
+  audience?: string;
+  unfinishedBuild?: { action: BuildAction; result: BuildResult };
+};
 export async function runAgent(
   session: Pick<Session, 'observe' | 'move' | 'request'>,
   planner: Pick<ModelPlanner, 'decide'>,
   config: AgentConfig,
   signal: AbortSignal,
   log: (message: string) => void = console.log,
+  memory: AgentRunState = {},
 ) {
-  let previous: unknown = null,
+  let previous: unknown = memory.previous ?? null,
     failures = 0;
-  let audience: string | undefined;
-  let unfinishedBuild: { action: BuildAction; result: BuildResult } | undefined;
+  let audience = memory.audience;
+  let unfinishedBuild = memory.unfinishedBuild;
   for (
     let turn = 1;
     (config.continuous || turn <= config.maxTurns) && !signal.aborted;
@@ -476,6 +482,9 @@ export async function runAgent(
           true,
         );
     }
+    memory.previous = previous;
+    memory.audience = audience;
+    memory.unfinishedBuild = unfinishedBuild;
     if ((config.continuous || turn < config.maxTurns) && !signal.aborted)
       await pause(nextIntervalMs(config), undefined, { signal }).catch(
         () => {},

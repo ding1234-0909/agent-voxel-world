@@ -32,6 +32,7 @@ export type ManagedAgentView = AgentSettings & {
   status:
     | 'joining'
     | 'running'
+    | 'idle'
     | 'stopping'
     | 'stopped'
     | 'completed'

@@ -48,6 +48,7 @@ server.onBeforeShutdown(() => agents.close());
 await server.listen(port, '127.0.0.1');
 const world = await matchMaker.createRoom('world', {});
 app.get('/world', (_req, res) => res.json({ roomId: world.roomId }));
+await agents.load();
 installChatRoutes(
   app,
   () =>
