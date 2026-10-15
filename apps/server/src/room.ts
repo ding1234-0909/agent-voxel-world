@@ -1,3 +1,4 @@
+import { createVoiceProvider, type VoiceSession } from './voice';
 import { WorldStore } from './store';
 import { Room, Client } from '@colyseus/core';
 import { Schema, MapSchema, defineTypes } from '@colyseus/schema';
@@ -17,6 +18,8 @@ export class WorldRoom extends Room<WorldState> {
  private budget=new Map<string,{at:number;count:number}>();
  private events:WorldEvent[]=[];
  private seq=0;
+ private voiceProvider=createVoiceProvider();
+ private voices=new Map<string,VoiceSession>();
  private queue:Promise<void>=Promise.resolve();
  autoDispose=false;
  maxClients=16;
@@ -34,6 +37,12 @@ export class WorldRoom extends Room<WorldState> {
     if(!input || !body) return this.reply(client,id,false,'invalid-input');
     body.input=input;body.lastInput=Date.now();return;
    }
+   if(type==='voice.start') {
+    if(typeof payload?.text!=='string' || !payload.text.trim() || payload.text.length>240)return this.reply(client,id,false,'invalid-voice-input');
+    let voice=this.voices.get(client.sessionId);if(!voice){voice=this.voiceProvider.create(event=>client.send('voice',event));this.voices.set(client.sessionId,voice);}
+    voice.push({kind:'text',text:payload.text});return this.reply(client,id,true);
+   }
+   if(type==='voice.interrupt'){this.voices.get(client.sessionId)?.interrupt();return this.reply(client,id,true);}
    if(type==='observe') { this.observe(client,id); return; }
    if(type==='chat') {
     if(typeof payload?.text!=='string' || !payload.text.trim() || payload.text.length>240) return this.reply(client,id,false,'invalid-chat');
@@ -74,12 +83,13 @@ export class WorldRoom extends Room<WorldState> {
   this.snapshot(client);this.event('joined',p.id,{name:p.name,kind:p.kind});
  }
  async onLeave(client:Client,consented:boolean) {
+  this.voices.get(client.sessionId)?.close();this.voices.delete(client.sessionId);
   const p=this.state.players.get(client.sessionId);if(p) p.connected=false;
   const body=this.bodies.get(client.sessionId);if(body) body.input={...zero};
   if(!consented) { try { const reconnected=await this.allowReconnection(client,20);if(p)p.connected=true;this.snapshot(reconnected);this.event('reconnected',client.sessionId,{});return; } catch {} }
   this.state.players.delete(client.sessionId);this.bodies.delete(client.sessionId);this.budget.delete(client.sessionId);this.event('left',client.sessionId,{});
  }
- async onDispose(){await this.queue;await this.store.close();activeRoom=false;}
+ async onDispose(){for(const voice of this.voices.values())voice.close();this.voices.clear();await this.queue;await this.store.close();activeRoom=false;}
  private snapshot(client:Client) {client.send('snapshot',{blocks:[...this.blocks.values()],revision:this.state.revision,persistence:this.store.mode});}
  private reply(client:Client,id:string,ok:boolean,error?:string) {client.send('result',{id,ok,error,revision:this.state.revision});}
  private allow(client:Client) {
@@ -89,6 +99,6 @@ export class WorldRoom extends Room<WorldState> {
  private event(type:string,actor:string,data:unknown) {const event={seq:++this.seq,type,actor,data,at:Date.now()};this.events.push(event);if(this.events.length>100)this.events.shift();this.broadcast('event',event);}
  private observe(client:Client,id:string) {
   const self=this.state.players.get(client.sessionId)!;
-  client.send('observation',{id,protocol:1,revision:this.state.revision,self:self.toJSON(),radius:8,blocks:[...this.blocks.values()].filter(b=>distance(self,b)<=8).slice(0,500),players:[...this.state.players.values()].filter(p=>distance(self,p)<=8).map(p=>p.toJSON()),events:this.events.slice(-30),allowedActions:['move','edit','chat','observe']});
+  client.send('observation',{id,protocol:1,revision:this.state.revision,self:self.toJSON(),radius:8,blocks:[...this.blocks.values()].filter(b=>distance(self,b)<=8).slice(0,500),players:[...this.state.players.values()].filter(p=>distance(self,p)<=8).map(p=>p.toJSON()),events:this.events.slice(-30),allowedActions:['move','edit','chat','observe','voice.start','voice.interrupt']});
  }
 }
