@@ -20,6 +20,7 @@ function App() {
     null,
   );
   const [agentPanel, setAgentPanel] = useState(false);
+  const [showControls, setShowControls] = useState(false);
   const openAgents = () => {
     if (document.pointerLockElement) document.exitPointerLock();
     window.dispatchEvent(new Event('blur'));
@@ -42,7 +43,10 @@ function App() {
   }, []);
   useEffect(() => {
     const closePanels = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setActivePanel(null);
+      if (event.key === 'Escape') {
+        setActivePanel(null);
+        setShowControls(false);
+      }
     };
     window.addEventListener('keydown', closePanels);
     return () => window.removeEventListener('keydown', closePanels);
@@ -62,6 +66,7 @@ function App() {
     connection.leave();
     setJoined(false);
     setActivePanel(null);
+    setShowControls(false);
   };
   return (
     <main className={joined ? 'in-game' : 'in-lobby'}>
@@ -189,12 +194,64 @@ function App() {
       {joined && (
         <footer>
           <div className="controls">
-            <b>W A S D</b> move <b>SPACE</b> jump <b>CLICK</b> look <b>ESC</b>{' '}
-            release
-            <br />
-            <span>
-              Left click removes · Right click places · Aim within 6 blocks
-            </span>
+            <button
+              className="controls-toggle"
+              aria-expanded={showControls}
+              aria-controls="controls-help"
+              onClick={() => setShowControls(!showControls)}
+            >
+              <span aria-hidden="true">?</span> 操作帮助
+            </button>
+            {showControls && (
+              <section
+                id="controls-help"
+                className="controls-help"
+                aria-label="操作帮助"
+              >
+                <div className="chat-title">
+                  <strong>操作帮助</strong>
+                  <button
+                    aria-label="关闭操作帮助"
+                    onClick={() => setShowControls(false)}
+                  >
+                    ×
+                  </button>
+                </div>
+                <dl>
+                  <div>
+                    <dt>
+                      <kbd>W A S D</kbd>
+                    </dt>
+                    <dd>移动</dd>
+                  </div>
+                  <div>
+                    <dt>
+                      <kbd>Space</kbd>
+                    </dt>
+                    <dd>跳跃</dd>
+                  </div>
+                  <div>
+                    <dt>点击画面</dt>
+                    <dd>锁定鼠标视角</dd>
+                  </div>
+                  <div>
+                    <dt>
+                      <kbd>Esc</kbd>
+                    </dt>
+                    <dd>释放鼠标 / 关闭帮助</dd>
+                  </div>
+                  <div>
+                    <dt>鼠标左键 / 右键</dt>
+                    <dd>移除 / 放置方块</dd>
+                  </div>
+                  <div>
+                    <dt>点击底部材质栏</dt>
+                    <dd>切换方块材质</dd>
+                  </div>
+                </dl>
+                <p>瞄准 6 格内的方块进行搭建。</p>
+              </section>
+            )}
           </div>
           <div className="hotbar">
             {(['grass', 'dirt', 'stone', 'wood'] as Material[]).map((m, i) => (
