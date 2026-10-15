@@ -910,6 +910,7 @@ footer {
   overflow-y: auto;
 }
 .in-lobby::before {
+  z-index: 1;
   content: '';
   position: fixed;
   inset: 0;
@@ -918,7 +919,7 @@ footer {
 }
 .in-lobby header {
   position: relative;
-  z-index: 1;
+  z-index: 2;
   max-width: 1280px;
   margin: 0 auto;
   padding: 30px 40px;
@@ -927,10 +928,12 @@ footer {
 }
 .in-lobby .lobby-layout {
   position: relative;
+  z-index: 2;
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.9fr);
+  grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.35fr);
   gap: 28px;
-  align-items: center;
+  align-items: stretch;
+  align-content: center;
   width: min(960px, calc(100% - 80px));
   min-height: calc(100dvh - 116px);
   padding: 24px 0 64px;
@@ -1119,5 +1122,25 @@ footer {
   }
   .in-lobby .join h2 {
     font-size: 30px;
+  }
+}
+
+@media (min-width: 761px) {
+  .in-lobby .join {
+    order: 2;
+  }
+  .in-lobby .world-panel {
+    order: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  .in-lobby .world-panel > * {
+    flex-shrink: 0;
+  }
+  .in-lobby .world-panel .player-list {
+    margin-bottom: 20px;
+  }
+  .in-lobby .world-panel .world-membership {
+    margin-top: auto;
   }
 }
