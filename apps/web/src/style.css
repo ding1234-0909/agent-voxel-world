@@ -496,3 +496,22 @@ footer {
     width: 220px;
   }
 }
+
+.exit-game {
+  pointer-events: auto;
+  padding: 9px 13px;
+  margin-left: 8px;
+  border: 1px solid #6c8e7d;
+  border-radius: 5px;
+  background: #f6f7ee;
+  color: #304c40;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.exit-game:hover {
+  background: #dce7d5;
+}
+.exit-game:focus-visible {
+  outline: 2px solid #304c40;
+  outline-offset: 3px;
+}

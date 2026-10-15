@@ -35,6 +35,12 @@ function App() {
     await connection.connect(explorerName);
     return connection.status === 'connected';
   };
+  const leaveWorld = () => {
+    scene.current?.leaveWorld();
+    connection.leave();
+    setJoined(false);
+    setChat('');
+  };
   return (
     <main>
       <div className="world" ref={host} />
@@ -49,6 +55,15 @@ function App() {
         <div className="status">
           <i className={connection.status === 'connected' ? 'online' : ''} />
           {connection.status} <span>WORLD 01</span>
+          {joined && (
+            <button
+              className="exit-game"
+              onClick={leaveWorld}
+              title="退出当前世界并返回进入页面"
+            >
+              退出游戏
+            </button>
+          )}
         </div>
       </header>
       <aside className="panel">
@@ -114,8 +129,12 @@ function App() {
           <small>Local multiplayer prototype · no paid services</small>
         </div>
       )}
-      <div className="crosshair">+</div>
-      <div className="target">{target}</div>
+      {joined && (
+        <>
+          <div className="crosshair">+</div>
+          <div className="target">{target}</div>
+        </>
+      )}
       <div className="communication">
         <VoicePanel connection={connection} onJoin={joinWorld} />
         <section className="chat">
@@ -139,7 +158,7 @@ function App() {
               maxLength={240}
               onChange={(e) => setChat(e.target.value)}
             />
-            <button disabled={!joined}>↗</button>
+            <button disabled={connection.status !== 'connected'}>↗</button>
           </form>
         </section>
       </div>
@@ -170,8 +189,18 @@ function App() {
           ))}
         </div>
         <div className="build-actions">
-          <button onClick={() => scene.current?.edit(false)}>Remove</button>
-          <button onClick={() => scene.current?.edit(true)}>Place block</button>
+          <button
+            disabled={connection.status !== 'connected'}
+            onClick={() => scene.current?.edit(false)}
+          >
+            Remove
+          </button>
+          <button
+            disabled={connection.status !== 'connected'}
+            onClick={() => scene.current?.edit(true)}
+          >
+            Place block
+          </button>
         </div>
       </footer>
     </main>

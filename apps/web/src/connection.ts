@@ -20,6 +20,9 @@ export class Connection {
   onVoice = (value: unknown) => {};
   private counter = 0;
   private stopped = false;
+  private generation = 0;
+  private retry?: ReturnType<typeof setTimeout>;
+  private request?: AbortController;
   async connect(name: string) {
     if (
       this.stopped ||
@@ -27,6 +30,12 @@ export class Connection {
       this.status === 'connected'
     )
       return;
+    const generation = ++this.generation;
+    const current = () => !this.stopped && generation === this.generation;
+    clearTimeout(this.retry);
+    this.request?.abort();
+    const request = new AbortController();
+    this.request = request;
     this.status = 'connecting';
     this.onChange();
     const client = new Client(
@@ -39,15 +48,28 @@ export class Connection {
         if (!token) throw Error('new');
         room = await client.reconnect(token);
       } catch {
+        if (!current()) return;
         const endpoint = (
           import.meta.env.VITE_SERVER_URL ?? 'ws://127.0.0.1:2567'
         ).replace(/^ws/, 'http');
-        const info = await fetch(`${endpoint}/world`).then((r) => r.json());
+        const info = await fetch(`${endpoint}/world`, {
+          signal: request.signal,
+        }).then((r) => {
+          if (!r.ok) throw Error(`World service: HTTP ${r.status}`);
+          return r.json();
+        });
+        if (!current()) return;
         room = await client.joinById(info.roomId, { name });
       }
+      if (!current()) {
+        void room.leave(true).catch(() => room.connection.close());
+        return;
+      }
       this.room = room;
+      const activeRoom = () => current() && this.room === room;
       sessionStorage.setItem('voxel-reconnect', room.reconnectionToken);
       room.onMessage('snapshot', (s: Snapshot) => {
+        if (!activeRoom()) return;
         this.blocks = new Map(s.blocks.map((b) => [key(b), b]));
         this.revision = s.revision;
         this.persistence = s.persistence;
@@ -55,6 +77,7 @@ export class Connection {
         this.onChange();
       });
       room.onMessage('edit', (e: Edit) => {
+        if (!activeRoom()) return;
         if (e.revision !== this.revision + 1) {
           room.send('sync');
           return;
@@ -72,6 +95,7 @@ export class Connection {
         this.onChange();
       });
       room.onMessage('event', (e: WorldEvent) => {
+        if (!activeRoom()) return;
         if (e.type === 'chat') {
           const d = e.data as { name: string; text: string };
           this.messages = [...this.messages, `${d.name}: ${d.text}`].slice(-30);
@@ -79,32 +103,39 @@ export class Connection {
         }
       });
       room.onMessage('result', (r: { ok: boolean; error?: string }) => {
+        if (!activeRoom()) return;
         if (!r.ok && r.error !== 'voice-provider-unavailable') {
           this.messages = [...this.messages, `⚠ ${r.error}`].slice(-30);
           this.onChange();
         }
       });
-      room.onMessage('voice', (value) => this.onVoice(value));
+      room.onMessage('voice', (value) => {
+        if (activeRoom()) this.onVoice(value);
+      });
       room.onMessage('observation', () => {});
       room.onStateChange((state) => {
+        if (!activeRoom()) return;
         this.players = [...state.players.values()].map((p: Player) => ({
           ...p,
         }));
         this.onChange();
       });
       room.onLeave(() => {
+        if (!activeRoom()) return;
+        this.room = undefined;
         this.status = 'disconnected';
         this.onVoice({
           state: 'interrupted',
           subtitle: '连接中断，语音会话已停止。',
         });
         this.onChange();
-        setTimeout(() => {
-          if (!this.stopped && this.status === 'disconnected')
+        this.retry = setTimeout(() => {
+          if (current() && this.status === 'disconnected')
             void this.connect(name);
         }, 1000);
       });
       room.onError((_code, message) => {
+        if (!activeRoom()) return;
         this.messages.push(`Connection: ${message}`);
         this.onChange();
       });
@@ -112,11 +143,12 @@ export class Connection {
       room.send('sync');
       this.onChange();
     } catch (error) {
+      if (!current()) return;
       this.status = 'offline';
       this.messages.push(String(error));
       this.onChange();
-      setTimeout(() => {
-        if (!this.stopped && this.status === 'offline') void this.connect(name);
+      this.retry = setTimeout(() => {
+        if (current() && this.status === 'offline') void this.connect(name);
       }, 3000);
     }
   }
@@ -127,9 +159,32 @@ export class Connection {
       return id;
     }
   }
+  /** Explicit exit: leave consentfully, invalidate pending joins and disable retries. */
+  leave() {
+    this.generation++;
+    clearTimeout(this.retry);
+    this.request?.abort();
+    const room = this.room;
+    this.room = undefined;
+    this.status = 'lobby';
+    this.players = [];
+    this.messages = [];
+    sessionStorage.removeItem('voxel-reconnect');
+    sessionStorage.removeItem('voxel-name');
+    this.onVoice({
+      state: 'idle',
+      subtitle: '已退出游戏，录音、识别和朗读已停止。',
+    });
+    this.onChange();
+    if (room) void room.leave(true).catch(() => room.connection.close());
+  }
   dispose() {
     this.stopped = true;
+    this.generation++;
+    clearTimeout(this.retry);
+    this.request?.abort();
     this.room?.connection.close();
+    this.room = undefined;
   }
   get self() {
     return this.players.find((p) => p.id === this.room?.sessionId);

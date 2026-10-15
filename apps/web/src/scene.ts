@@ -104,6 +104,7 @@ export class WorldScene {
     this.camera.updateProjectionMatrix();
   };
   private keydown = (event: KeyboardEvent) => {
+    if (this.connection.status !== 'connected') return;
     if ((event.target as HTMLElement).matches('input,textarea,button,select'))
       return;
     this.keys.add(event.code);
@@ -127,6 +128,7 @@ export class WorldScene {
     );
   };
   private mouse = (event: MouseEvent) => {
+    if (this.connection.status !== 'connected') return;
     if (document.pointerLockElement !== this.renderer.domElement) {
       void this.renderer.domElement.requestPointerLock();
       return;
@@ -228,6 +230,15 @@ export class WorldScene {
     this.renderer.render(this.scene, this.camera);
     this.raf = requestAnimationFrame(this.frame);
   };
+  leaveWorld() {
+    this.keys.clear();
+    if (document.pointerLockElement === this.renderer.domElement)
+      document.exitPointerLock();
+    this.camera.position.set(0, 6, 8);
+    this.camera.lookAt(0, 2, 0);
+    this.selected = undefined;
+    this.highlight.visible = false;
+  }
   dispose() {
     cancelAnimationFrame(this.raf);
     window.removeEventListener('resize', this.resize);
