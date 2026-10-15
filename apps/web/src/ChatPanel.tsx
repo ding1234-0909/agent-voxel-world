@@ -309,15 +309,28 @@ export function ChatPanel({ connection }: { connection: Connection }) {
       </button>
       <div className="chat-title">
         <div className="eyebrow">WORLD CHAT</div>
-        <select
-          aria-label="发送方式"
-          disabled={busy}
-          value={scope}
-          onChange={(e) => setScope(e.target.value as typeof scope)}
-        >
-          <option value="public">群聊 · 所有人</option>
-          <option value="private">私聊 · 仅 @ 对象</option>
-        </select>
+        <div className="chat-scope" role="group" aria-label="发送方式">
+          <button
+            type="button"
+            aria-label="群聊 · 所有人"
+            aria-pressed={scope === 'public'}
+            disabled={busy}
+            title="所有玩家和 Agent 都能收到"
+            onClick={() => setScope('public')}
+          >
+            群聊
+          </button>
+          <button
+            type="button"
+            aria-label="私聊 · 仅 @ 对象"
+            aria-pressed={scope === 'private'}
+            disabled={busy}
+            title="仅发送给选中的 @ 对象"
+            onClick={() => setScope('private')}
+          >
+            私聊
+          </button>
+        </div>
         <button
           className="dock-collapse"
           aria-label="收起世界聊天"
@@ -456,8 +469,23 @@ export function ChatPanel({ connection }: { connection: Connection }) {
           className="chat-send"
           disabled={!connected || busy || (!clip && !text.trim())}
           aria-label="发送消息"
+          title="发送消息"
         >
-          ↗
+          <svg
+            viewBox="0 0 24 24"
+            width="18"
+            height="18"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <path d="m21 3-6.5 18-4-7.5L3 9.5 21 3Z" />
+            <path d="m10.5 13.5 5-5" />
+          </svg>
         </button>
       </form>
       <div className="chat-tools">
@@ -509,11 +537,11 @@ export function ChatPanel({ connection }: { connection: Connection }) {
           </button>
         )}
       </div>
-      {scope === 'private' && (
-        <small className="chat-help">
-          仅发送给已选接收者（含 Agent），不会广播。
-        </small>
-      )}
+      <small className="chat-help chat-scope-help">
+        {scope === 'private'
+          ? '仅 @ 已选玩家和 Agent 可收到。'
+          : '所有在线玩家和 Agent 均可收到。'}
+      </small>
       {status && (
         <p role="status" className="chat-help">
           {status}

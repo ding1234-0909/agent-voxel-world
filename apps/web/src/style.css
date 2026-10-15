@@ -1222,15 +1222,39 @@ footer {
 .chat-title strong {
   font-size: 12px;
 }
-.chat-title select {
-  max-width: 170px;
-  font: inherit;
+.chat-scope {
+  display: flex;
+  flex-shrink: 0;
+  gap: 2px;
+  margin-left: auto;
+  padding: 3px;
+  border-radius: 8px;
+  background: #e4eadf;
+  box-shadow: inset 0 0 0 1px #314f4208;
+}
+.enhanced-chat .chat-scope button {
+  padding: 5px 12px;
+  border-radius: 6px;
+  background: transparent;
+  color: #65796d;
   font-size: 11px;
-  padding: 6px;
+  line-height: 1.5;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
+}
+.enhanced-chat .chat-scope button[aria-pressed='true'] {
+  background: #314f42;
+  color: #f8faf3;
+  box-shadow: 0 1px 3px #233b3020;
+}
+.enhanced-chat .chat-scope button:not([aria-pressed='true']):hover {
+  background: #f7f9f080;
   color: #314f42;
-  border: 1px solid #cbd5c8;
-  border-radius: 4px;
-  background: #fafcf5;
+}
+.chat-scope button:focus-visible {
+  outline: 2px solid #314f42;
+  outline-offset: 2px;
 }
 .spatial-voice small {
   display: block;
@@ -1297,10 +1321,32 @@ footer {
   gap: 6px;
 }
 .enhanced-chat .chat-send {
-  font-size: 22px;
-  padding: 2px 8px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 9px;
   background: #314f42;
-  color: white;
+  color: #f8faf3;
+  transition:
+    background 120ms ease,
+    box-shadow 120ms ease;
+}
+.enhanced-chat .chat-send:not(:disabled):hover {
+  background: #244235;
+  box-shadow: 0 2px 6px #233b3020;
+}
+.enhanced-chat .chat-send:focus-visible {
+  outline: 2px solid #314f42;
+  outline-offset: 3px;
+}
+.enhanced-chat .chat-send:disabled {
+  opacity: 1;
+  background: #e2e9da;
+  color: #94a394;
+  cursor: default;
 }
 .chat-recipients {
   display: flex;
@@ -1343,6 +1389,10 @@ footer {
   color: #994c33;
   line-height: 1.6;
   margin: 8px 0 0;
+}
+.chat-scope-help {
+  display: block;
+  min-height: 1.6em;
 }
 @media (max-width: 700px) {
   .in-game .communication {
