@@ -27,7 +27,7 @@ export class AgentSpeech {
     private notify: (recipient: string, event: AgentSpeechEvent) => void,
     private report: (actor: string, message: string) => void,
     private tts: SpeechSynthesizer = new LocalTts(),
-  ) {}
+  ) { }
   private speaker(actor: string) {
     return [...this.players()].find(
       (p) =>
@@ -120,8 +120,8 @@ export class AgentSpeech {
       while (
         this.clips.size >= 24 ||
         [...this.clips.values()].reduce((n, c) => n + c.bytes.length, 0) +
-          audio.bytes.length >
-          32 * 1024 * 1024
+        audio.bytes.length >
+        32 * 1024 * 1024
       )
         this.clips.delete(this.clips.keys().next().value!);
       this.clips.set(event.id, { event, bytes: audio.bytes, recipients });

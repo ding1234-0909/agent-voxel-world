@@ -50,8 +50,12 @@ try {
             finish_reason: 'stop',
             message: {
               content: JSON.stringify({
-                type: 'chat',
-                text: 'Managed fixture hello',
+                actions: [{ type: 'chat', text: 'Managed fixture hello' }],
+                task: {
+                  intent: 'continue',
+                  status: 'completed',
+                  summary: '已回复',
+                },
               }),
             },
           },

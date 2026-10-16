@@ -128,7 +128,10 @@ describe('multi-provider SDK requests', () => {
             choices: [
               {
                 finish_reason: 'stop',
-                message: { content: '{"type":"wait"}' },
+                message: {
+                  content:
+                    '{"actions":[{"type":"wait"}],"task":{"intent":"continue","status":"completed","summary":"测试决策"}}',
+                },
               },
             ],
           }),
@@ -159,7 +162,10 @@ describe('multi-provider SDK requests', () => {
           null,
           new AbortController().signal,
         ),
-      ).toEqual({ type: 'wait' });
+      ).toMatchObject({
+        actions: [{ type: 'wait' }],
+        task: { intent: 'continue', status: 'completed' },
+      });
       const [url, init] = request.mock.calls[0];
       expect(url).toBe('http://127.0.0.1:11434/v1/chat/completions');
       const body = JSON.parse(init!.body as string);

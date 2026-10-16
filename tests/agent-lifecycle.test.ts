@@ -55,7 +55,12 @@ function fakeSession(wait = Promise.resolve()) {
 function setup(
   s: ReturnType<typeof fakeSession>,
   decide: Planner['decide'] = vi.fn(async () => ({
-    type: 'wait' as const,
+    actions: [{ type: 'wait' as const }],
+    task: {
+      intent: 'continue' as const,
+      status: 'completed' as const,
+      summary: '测试决策',
+    },
   })),
 ) {
   manager = new AgentManager(store, 'ws://fixture', {
@@ -76,7 +81,14 @@ it('toggles voice during inference without restarting the agent or making anothe
   const s = fakeSession();
   const decide = vi.fn(async () => {
     await new Promise<void>((resolve) => (release = resolve));
-    return { type: 'wait' as const };
+    return {
+      actions: [{ type: 'wait' as const }],
+      task: {
+        intent: 'continue' as const,
+        status: 'completed' as const,
+        summary: '测试决策',
+      },
+    };
   });
   const m = setup(s, decide),
     job = m.create(settings);
@@ -95,7 +107,14 @@ it('toggles voice during inference without restarting the agent or making anothe
 });
 it('updates saved settings without inference, protects identity, validates inputs and persists', async () => {
   const s = fakeSession(),
-    decide = vi.fn(async () => ({ type: 'wait' as const }));
+    decide = vi.fn(async () => ({
+      actions: [{ type: 'wait' as const }],
+      task: {
+        intent: 'continue' as const,
+        status: 'completed' as const,
+        summary: '测试决策',
+      },
+    }));
   const m = setup(s, decide),
     job = m.create(settings);
   await vi.waitFor(() => expect(m.list()[0].status).toBe('idle'));
@@ -157,7 +176,14 @@ it('task errors leave a joined character online until explicitly closed', async 
 it('closing while join is pending cannot leave an orphan player or start inference', async () => {
   let resolve!: () => void;
   const s = fakeSession(new Promise<void>((r) => (resolve = r))),
-    decide = vi.fn(async () => ({ type: 'wait' as const }));
+    decide = vi.fn(async () => ({
+      actions: [{ type: 'wait' as const }],
+      task: {
+        intent: 'continue' as const,
+        status: 'completed' as const,
+        summary: '测试决策',
+      },
+    }));
   const m = setup(s, decide),
     job = m.create(settings);
   m.stop(job.id);
@@ -188,7 +214,14 @@ it('unexpected disconnect releases identity and allows rejoining the same saved 
 it('human mentions wake an idle agent once and queue during inference without concurrent calls', async () => {
   const s = fakeSession();
   let release!: () => void;
-  const decide = vi.fn(async () => ({ type: 'wait' as const }));
+  const decide = vi.fn(async () => ({
+    actions: [{ type: 'wait' as const }],
+    task: {
+      intent: 'continue' as const,
+      status: 'completed' as const,
+      summary: '测试决策',
+    },
+  }));
   const m = setup(s, decide),
     job = m.create(settings);
   await vi.waitFor(() => expect(m.list()[0].status).toBe('idle'));
@@ -212,7 +245,14 @@ it('human mentions wake an idle agent once and queue during inference without co
     await new Promise<void>((resolve) => {
       release = resolve;
     });
-    return { type: 'wait' };
+    return {
+      actions: [{ type: 'wait' }],
+      task: {
+        intent: 'continue' as const,
+        status: 'completed' as const,
+        summary: '测试决策',
+      },
+    };
   });
   s.onEvent!(mention(2));
   await vi.waitFor(() => expect(decide).toHaveBeenCalledTimes(2));
@@ -233,7 +273,7 @@ it('human mentions wake an idle agent once and queue during inference without co
 it('pause, resume and cancel keep identity and retain task progress across restart', async () => {
   const s = fakeSession();
   const decide = vi.fn(async () => ({
-    type: 'wait' as const,
+    actions: [{ type: 'wait' as const }],
     task: {
       intent: 'continue' as const,
       status: 'running' as const,
@@ -276,11 +316,14 @@ it('pausing pending inference drops late edits and does not close the character'
       release = resolve;
     });
     return {
-      type: 'edit' as const,
-      x: 2,
-      y: 3,
-      z: 1,
-      material: 'wood' as const,
+      actions: [
+        { type: 'edit' as const, x: 2, y: 3, z: 1, material: 'wood' as const },
+      ],
+      task: {
+        intent: 'continue' as const,
+        status: 'running' as const,
+        summary: '测试决策',
+      },
     };
   });
   const m = setup(s, decide),
@@ -298,12 +341,19 @@ it('pausing pending inference drops late edits and does not close the character'
 
 it('expired private task audiences cannot be resumed after server restart', async () => {
   const s = fakeSession(),
-    decide = vi.fn(async () => ({ type: 'wait' as const }));
+    decide = vi.fn(async () => ({
+      actions: [{ type: 'wait' as const }],
+      task: {
+        intent: 'continue' as const,
+        status: 'completed' as const,
+        summary: '测试决策',
+      },
+    }));
   const m = setup(s, decide),
     job = m.create(settings);
   await vi.waitFor(() => expect(m.list()[0].status).toBe('idle'));
   decide.mockResolvedValueOnce({
-    type: 'wait',
+    actions: [{ type: 'wait' }],
     task: {
       intent: 'task',
       status: 'waiting',
@@ -340,12 +390,19 @@ it('expired private task audiences cannot be resumed after server restart', asyn
 
 it('keeps the current chat-assigned goal consistent through editing, persistence and rerunning', async () => {
   const s = fakeSession();
-  const decide = vi.fn<Planner['decide']>(async () => ({ type: 'wait' }));
+  const decide = vi.fn<Planner['decide']>(async () => ({
+    actions: [{ type: 'wait' }],
+    task: {
+      intent: 'continue' as const,
+      status: 'completed' as const,
+      summary: '测试决策',
+    },
+  }));
   const m = setup(s, decide),
     job = m.create(settings);
   await vi.waitFor(() => expect(m.list()[0].status).toBe('idle'));
   decide.mockResolvedValueOnce({
-    type: 'wait',
+    actions: [{ type: 'wait' }],
     task: {
       intent: 'task',
       status: 'completed',
@@ -408,8 +465,7 @@ it('an online agent with a failed task still accepts a new human mention without
   await vi.waitFor(() => expect(m.list()[0].status).toBe('failed'));
   expect(decide).toHaveBeenCalledTimes(1);
   decide.mockResolvedValueOnce({
-    type: 'chat',
-    text: '我还在，任务已暂停。',
+    actions: [{ type: 'chat', text: '我还在，任务已暂停。' }],
     task: { intent: 'reply', status: 'completed', summary: '已回复' },
   });
   s.onEvent!({

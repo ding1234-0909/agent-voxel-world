@@ -256,15 +256,30 @@ describe('bounded multi-block construction', () => {
       .mockResolvedValueOnce({ ok: false, error: 'out-of-reach', revision: 4 });
     const decide = vi
       .fn()
-      .mockResolvedValueOnce({ type: 'build', blocks: [batch.blocks[0]] })
       .mockResolvedValueOnce({
-        type: 'move',
-        x: 1,
-        z: 0,
-        jump: false,
-        durationMs: 100,
+        actions: [{ type: 'build', blocks: [batch.blocks[0]] }],
+        task: {
+          intent: 'continue' as const,
+          status: 'running' as const,
+          summary: '测试决策',
+        },
       })
-      .mockResolvedValueOnce({ type: 'wait' });
+      .mockResolvedValueOnce({
+        actions: [{ type: 'move', x: 1, z: 0, jump: false, durationMs: 100 }],
+        task: {
+          intent: 'continue' as const,
+          status: 'running' as const,
+          summary: '测试决策',
+        },
+      })
+      .mockResolvedValueOnce({
+        actions: [{ type: 'wait' }],
+        task: {
+          intent: 'continue' as const,
+          status: 'completed' as const,
+          summary: '测试决策',
+        },
+      });
     await runAgent(
       s as unknown as Session,
       { decide },

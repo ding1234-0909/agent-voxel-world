@@ -12,6 +12,7 @@ import {
   Session,
   runTaskStep,
   newTask,
+  restoreBatchHistory,
   AgentAttention,
   ModelPlanner,
   AgentRuntimeError,
@@ -389,6 +390,7 @@ export class AgentManager {
         },
         attention: new AgentAttention(),
       };
+      job.memory.previous = restoreBatchHistory(job.memory.previous);
       if (
         job.memory.task &&
         ['running', 'waiting'].includes(job.memory.task.status)
@@ -802,6 +804,7 @@ export class AgentManager {
           job.memory,
           job.attention,
           log,
+          () => this.persist(),
         );
       }
       finalStatus =

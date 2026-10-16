@@ -64,3 +64,21 @@ export function parseAction(value: unknown, allowEdits: boolean): AgentAction {
       return fail();
   }
 }
+
+export const MAX_ACTIONS = 8;
+
+export function parseActions(
+  value: unknown,
+  allowEdits: boolean,
+): AgentAction[] {
+  if (!Array.isArray(value) || value.length < 1 || value.length > MAX_ACTIONS)
+    throw Error(`动作序列须包含 1–${MAX_ACTIONS} 个动作。`);
+  const actions = value.map((action) => parseAction(action, allowEdits));
+  if (actions.slice(0, -1).some((a) => a.type === 'wait'))
+    throw Error('wait 只能出现在序列末尾。');
+  if (
+    actions.filter((a) => a.type === 'build' || a.type === 'house').length > 1
+  )
+    throw Error('每批最多一个 build 或 house。');
+  return actions;
+}

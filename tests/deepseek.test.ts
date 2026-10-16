@@ -82,11 +82,15 @@ describe('DeepSeek agent boundary', () => {
   it('uses official JSON mode and sends world observations without credentials in the prompt', async () => {
     const request = vi
       .fn<typeof fetch>()
-      .mockResolvedValue(response('{"type":"chat","text":"你好"}'));
+      .mockResolvedValue(
+        response(
+          '{"actions":[{"type":"chat","text":"你好"}],"task":{"intent":"continue","status":"completed","summary":"测试决策"}}',
+        ),
+      );
     const planner = new ModelPlanner(config(), request);
-    expect(await planner.decide(observation, null, signal())).toEqual({
-      type: 'chat',
-      text: '你好',
+    expect(await planner.decide(observation, null, signal())).toMatchObject({
+      actions: [{ type: 'chat', text: '你好' }],
+      task: { intent: 'continue', status: 'completed' },
     });
     const [url, init] = request.mock.calls[0];
     expect(url).toBe('https://api.deepseek.com/chat/completions');
@@ -106,7 +110,11 @@ describe('DeepSeek agent boundary', () => {
   it('passes DeepSeek thinking and high reasoning effort through the OpenAI SDK', async () => {
     const request = vi
       .fn<typeof fetch>()
-      .mockResolvedValue(response('{"type":"wait"}'));
+      .mockResolvedValue(
+        response(
+          '{"actions":[{"type":"wait"}],"task":{"intent":"continue","status":"completed","summary":"测试决策"}}',
+        ),
+      );
     const cfg = agentConfig({
       DEEPSEEK_API_KEY: 'key',
       DEEPSEEK_THINKING: 'enabled',
@@ -166,7 +174,11 @@ describe('DeepSeek agent boundary', () => {
     abort.abort();
     const late = vi
       .fn<typeof fetch>()
-      .mockResolvedValue(response('{"type":"wait"}'));
+      .mockResolvedValue(
+        response(
+          '{"actions":[{"type":"wait"}],"task":{"intent":"continue","status":"completed","summary":"测试决策"}}',
+        ),
+      );
     await expect(
       new ModelPlanner(config(), late).decide(observation, null, abort.signal),
     ).rejects.toThrow('已停止');
@@ -229,8 +241,7 @@ describe('AI action execution', () => {
   it('caps model calls and supplies action results to the next decision', async () => {
     const s = session(),
       decide = vi.fn().mockResolvedValue({
-        type: 'chat',
-        text: '你好',
+        actions: [{ type: 'chat', text: '你好' }],
         task: { intent: 'continue', status: 'running', summary: '进行中' },
       });
     await runAgent(
@@ -243,8 +254,12 @@ describe('AI action execution', () => {
     expect(decide).toHaveBeenCalledTimes(2);
     expect(decide.mock.calls[1][1]).toMatchObject({
       previous: {
-        action: { type: 'chat' },
-        result: { ok: false, error: 'conflict' },
+        results: [
+          {
+            action: { type: 'chat' },
+            result: { ok: false, error: 'conflict' },
+          },
+        ],
       },
     });
   });
@@ -320,7 +335,7 @@ describe('continuous and randomized scheduling', () => {
   });
   it('legacy continuous flag cannot bypass the task budget', async () => {
     const decide = vi.fn(async () => ({
-      type: 'wait' as const,
+      actions: [{ type: 'wait' as const }],
       task: {
         intent: 'continue' as const,
         status: 'running' as const,
@@ -343,7 +358,7 @@ describe('continuous and randomized scheduling', () => {
         { observe: async () => observation, move: vi.fn(), request: vi.fn() },
         {
           decide: async () => ({
-            type: 'wait',
+            actions: [{ type: 'wait' }],
             task: {
               intent: 'continue',
               status: 'running',
@@ -369,7 +384,7 @@ describe('continuous and randomized scheduling', () => {
   it('interrupts a long randomized wait without starting another inference', async () => {
     const abort = new AbortController(),
       decide = vi.fn(async () => ({
-        type: 'wait' as const,
+        actions: [{ type: 'wait' as const }],
         task: {
           intent: 'continue' as const,
           status: 'running' as const,
@@ -419,18 +434,20 @@ describe('continuous and randomized scheduling', () => {
 });
 
 describe('task decision output formats', () => {
-  it('accepts the real DeepSeek action/task envelope and preserves private routing', async () => {
+  it('accepts the actions/task decision and preserves private routing', async () => {
     const value = {
+      actions: [
+        {
+          type: 'chat',
+          text: '你好！',
+          scope: 'private',
+          recipients: ['human'],
+        },
+      ],
       task: {
         intent: 'reply',
         status: 'completed',
         summary: 'Answered greeting privately.',
-      },
-      action: {
-        type: 'chat',
-        text: '你好！',
-        scope: 'private',
-        recipients: ['human'],
       },
     };
     const request = vi
@@ -443,18 +460,22 @@ describe('task decision output formats', () => {
         signal(),
       ),
     ).toMatchObject({
-      type: 'chat',
-      text: '你好！',
-      scope: 'private',
-      recipients: ['human'],
+      actions: [
+        {
+          type: 'chat',
+          text: '你好！',
+          scope: 'private',
+          recipients: ['human'],
+        },
+      ],
       task: { intent: 'reply' },
     });
   });
-  it('envelope parsing does not bypass action permissions or task validation', () => {
+  it('batch parsing does not bypass action permissions or task validation', () => {
     expect(() =>
       parseDecision(
         {
-          action: { type: 'edit', x: 1, y: 3, z: 1, material: 'wood' },
+          actions: [{ type: 'edit', x: 1, y: 3, z: 1, material: 'wood' }],
           task: {
             intent: 'task',
             status: 'running',
@@ -468,7 +489,7 @@ describe('task decision output formats', () => {
     expect(() =>
       parseDecision(
         {
-          action: { type: 'shell' },
+          actions: [{ type: 'shell' }],
           task: { intent: 'reply', status: 'completed', summary: 'x' },
         },
         true,
@@ -477,7 +498,7 @@ describe('task decision output formats', () => {
     expect(() =>
       parseDecision(
         {
-          action: { type: 'wait' },
+          actions: [{ type: 'wait' }],
           task: { intent: 'unknown', status: 'running', summary: 'x' },
         },
         true,

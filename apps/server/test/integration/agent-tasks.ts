@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import express from 'express';
 import { createServer } from 'node:http';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Server, matchMaker } from '@colyseus/core';
@@ -54,7 +54,7 @@ try {
     const message = prompt.observation.attention?.data.text ?? '';
     const task = prompt.previous.task;
     let action: any = {
-      type: 'wait',
+      actions: [{ type: 'wait' }],
       task: {
         intent: 'continue',
         status: 'completed',
@@ -63,11 +63,7 @@ try {
     };
     if (message.includes('建造'))
       action = {
-        type: 'edit',
-        x: 2,
-        y: 3,
-        z: 1,
-        material: 'wood',
+        actions: [{ type: 'edit', x: 2, y: 3, z: 1, material: 'wood' }],
         task: {
           intent: 'task',
           status: 'running',
@@ -77,16 +73,12 @@ try {
       };
     else if (message === '格式错误测试')
       action = {
-        type: 'unsupported',
+        actions: [{ type: 'unsupported' }],
         task: { intent: 'reply', status: 'completed', summary: '无效动作' },
       };
     else if (message === '到我这里来')
       action = {
-        type: 'move',
-        x: 1,
-        z: 0,
-        jump: false,
-        durationMs: 300,
+        actions: [{ type: 'move', x: 1, z: 0, jump: false, durationMs: 300 }],
         task: {
           intent: 'task',
           goal: '靠近发送者',
@@ -97,8 +89,7 @@ try {
       };
     else if (task?.goal === '靠近发送者' && !message)
       action = {
-        type: 'chat',
-        text: '已检查移动结果。',
+        actions: [{ type: 'chat', text: '已检查移动结果。' }],
         task: {
           intent: 'continue',
           status: 'completed',
@@ -107,8 +98,7 @@ try {
       };
     else if (message)
       action = {
-        type: 'chat',
-        text: '收到，这是一条单次回复。',
+        actions: [{ type: 'chat', text: '收到，这是一条单次回复。' }],
         task: {
           intent: 'reply',
           status: 'completed',
@@ -119,8 +109,7 @@ try {
       };
     else if (task?.goal.includes('木方块'))
       action = {
-        type: 'chat',
-        text: '木方块已放好。',
+        actions: [{ type: 'chat', text: '木方块已放好。' }],
         task: {
           intent: 'continue',
           status: 'completed',
@@ -129,7 +118,7 @@ try {
       };
     else if (task?.goal.includes('等待'))
       action = {
-        type: 'wait',
+        actions: [{ type: 'wait' }],
         task: {
           intent: 'continue',
           status: 'waiting',
@@ -139,7 +128,7 @@ try {
       };
     else if (task?.goal.includes('循环'))
       action = {
-        type: 'wait',
+        actions: [{ type: 'wait' }],
         task: {
           intent: 'continue',
           status: 'running',
@@ -159,13 +148,59 @@ try {
         );
       });
       action = {
-        type: 'edit',
-        x: 2,
-        y: 4,
-        z: 1,
-        material: 'wood',
+        actions: [{ type: 'edit', x: 2, y: 4, z: 1, material: 'wood' }],
         task: { intent: 'continue', status: 'running', summary: '迟到动作' },
       };
+    }
+    if (!message && task?.goal.startsWith('批次')) {
+      const previous = prompt.previous.previous;
+      const directive = {
+        intent: 'continue',
+        status: 'running',
+        summary: '执行短动作序列',
+      };
+      if (previous?.results) {
+        action = {
+          actions: [{ type: 'wait' }],
+          task: {
+            ...directive,
+            status: previous.ok ? 'completed' : 'needs_input',
+            summary: '已检查整个批次结果',
+          },
+        };
+      } else if (task.goal === '批次成功') {
+        action = {
+          actions: [
+            { type: 'edit', x: 3, y: 3, z: 0, material: 'wood' },
+            { type: 'edit', x: 3, y: 4, z: 0, material: 'wood' },
+            { type: 'chat', text: '批次施工进展' },
+          ],
+          task: directive,
+        };
+      } else if (task.goal === '批次失败') {
+        action = {
+          actions: [
+            { type: 'edit', x: 3, y: 3, z: 1, material: 'wood' },
+            { type: 'edit', x: 3, y: 3, z: 1, material: 'stone' },
+            { type: 'edit', x: 3, y: 4, z: 1, material: 'wood' },
+          ],
+          task: directive,
+        };
+      } else {
+        action = {
+          actions: [
+            {
+              type: 'move',
+              x: 1,
+              z: 0,
+              jump: false,
+              durationMs: task.goal === '批次暂停' ? 1500 : 300,
+            },
+            { type: 'edit', x: 3, y: 3, z: 2, material: 'wood' },
+          ],
+          task: directive,
+        };
+      }
     }
     return new Response(
       JSON.stringify({
@@ -174,10 +209,7 @@ try {
           {
             finish_reason: 'stop',
             message: {
-              content: JSON.stringify({
-                action: { ...action, task: undefined },
-                task: action.task,
-              }),
+              content: JSON.stringify(action),
             },
           },
         ],
@@ -269,7 +301,7 @@ try {
       !other.events.some((e) => (e.data as any).text === '木方块已放好。'),
       'private task report stays private',
     );
-    assert.equal(prompts.at(-1).previous.previous.result.ok, true);
+    assert.equal(prompts.at(-1).previous.previous.results[0].result.ok, true);
     const beforeFailure = calls;
     await human.request('chat', {
       scope: 'public',
@@ -370,8 +402,88 @@ try {
     assert.equal(current().task?.goal, savedTask?.goal);
     assert.equal(current().task?.status, 'paused');
     assert(current().usage!.calls >= beforeRestore);
+    await manager.update(job.id, {
+      maxTurns: 30,
+      intervalMode: 'fixed',
+      intervalMs: 1000,
+    });
+    const beforeBatch = calls;
+    await manager.assignTask(job.id, { goal: '批次成功' });
+    await until(() => current().task?.status === 'completed');
+    assert.equal(
+      calls,
+      beforeBatch + 2,
+      'three actions cost one call plus verification',
+    );
+    assert.equal(room.blocks.get('3,3,0')?.material, 'wood');
+    assert.equal(room.blocks.get('3,4,0')?.material, 'wood');
+    assert.deepEqual(
+      prompts.at(-1).previous.previous.results.map((r: any) => r.status),
+      ['succeeded', 'succeeded', 'succeeded'],
+    );
+
+    await manager.assignTask(job.id, { goal: '批次失败' });
+    await until(() => current().task?.status === 'needs_input');
+    assert.equal(room.blocks.get('3,3,1')?.material, 'wood');
+    assert.equal(room.blocks.has('3,4,1'), false);
+    assert.deepEqual(
+      prompts.at(-1).previous.previous.results.map((r: any) => r.status),
+      ['succeeded', 'failed', 'pending'],
+    );
+
+    const player = room.state.players.get(current().sessionId!)!;
+    const position = { x: player.x, y: player.y, z: player.z };
+    player.x = 11.7;
+    player.z = 0;
+    player.y =
+      Math.max(
+        ...[...room.blocks.values()]
+          .filter((b) => b.x === 12 && b.z === 0)
+          .map((b) => b.y),
+      ) + 0.5;
+    await delay(300);
+    await manager.assignTask(job.id, { goal: '批次受阻' });
+    await until(() => current().task?.status === 'needs_input');
+    assert.equal(
+      prompts.at(-1).previous.previous.stopReason,
+      'movement_stalled',
+    );
+    assert.equal(prompts.at(-1).previous.previous.results[1].status, 'pending');
+    Object.assign(player, position);
+
+    const beforePause = calls;
+    await manager.assignTask(job.id, { goal: '批次暂停' });
+    await until(
+      () =>
+        calls === beforePause + 1 &&
+        current().logs.some((l) => l.includes('第 1/2 个动作：move')),
+    );
+    await delay(100);
+    await manager.controlTask(job.id, 'pause');
+    assert.equal(current().task?.status, 'paused');
+    assert.equal(
+      room.blocks.has('3,3,2'),
+      false,
+      'pause prevents trailing edit',
+    );
+    const saved = JSON.parse(
+      await readFile(join(dir, 'providers.json.agents.json'), 'utf8'),
+    ).find((j: any) => j.id === job.id);
+    assert.equal(saved.runtime.previous.results[0].status, 'interrupted');
+    assert.equal(saved.runtime.previous.results[1].status, 'pending');
+    const beforeBatchRestore = calls;
+    await manager.close();
+    manager = makeManager();
+    await manager.load();
+    assert.equal(
+      calls,
+      beforeBatchRestore,
+      'restore never replays the saved tail',
+    );
+    assert.equal(current().task?.status, 'paused');
+    assert.equal(room.blocks.has('3,3,2'), false);
     console.log(
-      'PASS: private chat = one call; explicit task advances and verifies real edits; private report isolation; fixed/random one-step polling; unchanged waits cost zero calls; pause/resume/cancel preserve identity; budgets stop loops; chat pause aborts inference; persisted progress restores without inference. No cloud calls.',
+      'PASS: private chat = one call; explicit task advances and verifies real edits; private report isolation; fixed/random one-step polling; unchanged waits cost zero calls; pause/resume/cancel preserve identity; budgets stop loops; chat pause aborts inference; persisted progress restores without inference; multi-action success, middle failure, blocked movement, mid-batch pause and restart without replay. No cloud calls.',
     );
   }
 } finally {

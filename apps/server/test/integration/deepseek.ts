@@ -61,11 +61,14 @@ try {
             finish_reason: 'stop',
             message: {
               content: JSON.stringify({
-                ...actions.shift(),
+                actions: calls.length === 1 ? actions : [{ type: 'wait' }],
                 task: {
                   intent: 'continue',
-                  status: 'running',
-                  summary: '继续测试任务',
+                  status: calls.length === 1 ? 'running' : 'completed',
+                  summary:
+                    calls.length === 1
+                      ? '执行移动、聊天、编辑和房屋建造'
+                      : '观察确认房屋完成',
                 },
               }),
             },
@@ -92,7 +95,7 @@ try {
     tokenBudget: 50000,
     taskTimeoutMs: 900000,
     timeoutMs: 30000,
-    maxTurns: 4,
+    maxTurns: 2,
     intervalMs: 0,
   };
   await runAgent(
@@ -133,8 +136,8 @@ try {
   assert.equal(room.blocks.get('2,3,1')?.material, 'wood');
   assert.equal(
     calls.length,
-    4,
-    'one model call constructs all 32 house blocks',
+    2,
+    'one model call executes four actions; a second verifies completion',
   );
   assert(
     JSON.parse(calls[1].body as string).messages[1].content.includes(
@@ -145,7 +148,7 @@ try {
   await session.close(); // SIGINT + finally cleanup must be idempotent.
   await until(() => room.state.players.size === 0);
   console.log(
-    'PASS: OpenAI SDK JSON requests, AI identity, movement, chat, a 32-block hollow house from one model call with revision-checked edits, idempotent cleanup. Inference uses fixture responses, no external API calls.',
+    'PASS: one SDK call executes move + chat + edit + 32-block house, fresh revisions and observations, second-call completion verification, idempotent cleanup. Fixture inference only.',
   );
 } finally {
   await session?.close();

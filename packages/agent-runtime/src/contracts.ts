@@ -52,6 +52,8 @@ export type BuildResult = {
   remaining: PlannedEdit[];
   failures: { block: PlannedEdit; error: string }[];
   note: string;
+  /** Edits sent without an acknowledgement; reconcile before retrying. */
+  uncertain?: PlannedEdit[];
 };
 
 export type TaskDirective = {
@@ -82,7 +84,37 @@ export type AgentAction =
       material: Material | null;
     };
 
-export type AgentDecision = AgentAction & { task?: TaskDirective };
+export type AgentDecision = { actions: AgentAction[]; task: TaskDirective };
+export type ActionResult = Result | BuildResult | { ok: boolean; note: string };
+export type ActionExecution = {
+  action: AgentAction;
+  status:
+    | 'pending'
+    | 'executing'
+    | 'succeeded'
+    | 'failed'
+    | 'interrupted'
+    | 'unknown';
+  result?: ActionResult;
+  before?: Vec3;
+  after?: Vec3;
+};
+export type BatchResult = {
+  actions: AgentAction[];
+  results: ActionExecution[];
+  remaining: AgentAction[];
+  ok: boolean;
+  stopReason:
+    | 'executing'
+    | 'completed'
+    | 'failed'
+    | 'message'
+    | 'aborted'
+    | 'timeout'
+    | 'unknown'
+    | 'observation_failed'
+    | 'movement_stalled';
+};
 
 export type AgentConfig = Omit<AgentSettings, 'providerId'> & {
   apiKey: string;

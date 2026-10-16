@@ -9,6 +9,9 @@ export type {
   TaskDirective,
   AgentAction,
   AgentDecision,
+  ActionResult,
+  ActionExecution,
+  BatchResult,
   AgentConfig,
   ModelEndpoint,
 } from './contracts';
@@ -20,6 +23,7 @@ export { Session, delay, until } from './client/session';
 export { parseAction } from './actions/parse';
 
 export { executeAction } from './actions/execute';
+export { executeBatch } from './actions/batch';
 
 export {
   BUILD_STEP_MS,
@@ -39,6 +43,7 @@ export { AgentAttention } from './runtime/attention';
 export {
   parseTaskDirective,
   newTask,
+  restoreBatchHistory,
   type AgentRunState,
 } from './runtime/task';
 

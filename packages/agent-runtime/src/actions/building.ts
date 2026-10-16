@@ -1,4 +1,4 @@
-import { inBounds, key } from '@voxel/shared';
+import { inBounds, key, distance } from '@voxel/shared';
 import { setTimeout as pause } from 'node:timers/promises';
 import type {
   Observation,
@@ -111,6 +111,7 @@ export async function executeBuild(
   action: BuildAction,
   signal: AbortSignal,
   progress: (message: string) => void = () => {},
+  checkpoint: (result: BuildResult) => void = () => {},
 ): Promise<BuildResult> {
   const blocks = action.type === 'house' ? houseBlocks(action) : action.blocks;
   let observation = await session.request<Observation>('observe');
@@ -121,10 +122,16 @@ export async function executeBuild(
     total: blocks.length,
     completed: 0,
     skipped: 0,
-    remaining: [],
+    remaining: [...blocks],
     failures: [],
     note: '',
   };
+  const save = () => checkpoint(structuredClone(result));
+  const resolved = (block: PlannedEdit) => {
+    result.remaining = result.remaining.filter((b) => key(b) !== key(block));
+    save();
+  };
+  save();
   if (action.type === 'house') {
     const shell = new Set(blocks.map(key));
     const obstruction = observation.blocks.find(
@@ -147,6 +154,7 @@ export async function executeBuild(
       ];
       result.note =
         '房屋内部或门洞已有方块，尚未开始施工；请选择空地或明确规划清理，不会自动拆除已有地形。';
+      save();
       progress(result.note);
       return result;
     }
@@ -155,21 +163,32 @@ export async function executeBuild(
   for (let index = 0; index < blocks.length; index++) {
     signal.throwIfAborted();
     const block = blocks[index]!;
-    // Only skip placements positively observed with the requested material.
-    if (block.material !== null && known.get(key(block)) === block.material) {
+    // Skip confirmed matching placements or removals proven empty within the observation cutoff.
+    if (
+      (block.material !== null && known.get(key(block)) === block.material) ||
+      (block.material === null &&
+        !known.has(key(block)) &&
+        observedEmpty(observation, block))
+    ) {
       result.skipped++;
+      resolved(block);
       continue;
     }
     if (index > 0) await pause(BUILD_STEP_MS, undefined, { signal });
     let failure: string | undefined;
     for (let attempt = 0; attempt < 2; attempt++) {
       signal.throwIfAborted();
+      result.uncertain = [block];
+      save();
       const reply = await session.request('edit', { ...block, revision });
+      result.uncertain = [];
+      save();
       revision = reply.revision;
       if (reply.ok) {
         if (block.material === null) known.delete(key(block));
         else known.set(key(block), block.material);
         result.completed++;
+        resolved(block);
         failure = undefined;
         break;
       }
@@ -183,6 +202,7 @@ export async function executeBuild(
           known.get(key(block)) === block.material
         ) {
           result.skipped++;
+          resolved(block);
           failure = undefined;
           break;
         }
@@ -191,8 +211,8 @@ export async function executeBuild(
       } else break;
     }
     if (failure) {
-      result.remaining.push(block);
       result.failures.push({ block, error: failure });
+      save();
       if (
         ![
           'out-of-reach',
@@ -202,7 +222,6 @@ export async function executeBuild(
           'empty',
         ].includes(failure)
       ) {
-        result.remaining.push(...blocks.slice(index + 1));
         break;
       }
     }
@@ -215,6 +234,21 @@ export async function executeBuild(
   result.note = `建造${result.ok ? '完成' : '未完成'}：${result.completed} 个已修改，${result.skipped} 个已存在，${result.remaining.length} 个待处理。`;
   if (!result.ok)
     result.note += '根据失败原因调整位置/蓝图后重试；不要宣称房屋已完成。';
+  save();
   progress(result.note);
   return result;
+}
+
+/** Absence is evidence only inside the observed radius AND the nearest-block cutoff. */
+export function observedEmpty(observation: Observation, block: PlannedEdit) {
+  const d = distance(observation.self, block);
+  return (
+    d <= observation.radius &&
+    !observation.blocks.some((b) => key(b) === key(block)) &&
+    (observation.blocks.length < 500 ||
+      d <
+        Math.max(
+          ...observation.blocks.map((b) => distance(observation.self, b)),
+        ))
+  );
 }

@@ -5,13 +5,15 @@ import type {
   Observation,
   AgentConfig,
   Planner,
+  AgentAction,
 } from '../contracts';
 import type { AgentAttention } from './attention';
-import { parseTaskDirective, newTask, type AgentRunState } from './task';
-import { executeAction } from '../actions/execute';
-import { parseAction } from '../actions/parse';
+import { newTask, type AgentRunState } from './task';
+import { executeBatch } from '../actions/batch';
+import { parseDecision } from './decision';
 import { AgentRuntimeError } from '../errors';
-import { houseBlocks } from '../actions/building';
+import { houseBlocks, observedEmpty } from '../actions/building';
+import { key } from '@voxel/shared';
 
 export function worldSignature(o: Observation, kind: AgentTask['waitFor']) {
   return JSON.stringify(
@@ -48,6 +50,7 @@ export async function runTaskStep(
   memory: AgentRunState,
   attention?: AgentAttention,
   log: (message: string) => void = () => {},
+  checkpoint: () => void = () => {},
 ) {
   const addressed = attention?.take();
   let task = memory.task;
@@ -74,33 +77,19 @@ export async function runTaskStep(
     const observed = new Map(
       (raw.blocks ?? []).map((b) => [`${b.x},${b.y},${b.z}`, b.material]),
     );
-    const previous = memory.previous as
-      | {
-          action?: {
-            type?: string;
-            x?: number;
-            y?: number;
-            z?: number;
-            material?: unknown;
-          };
-          result?: { ok?: boolean };
-        }
-      | undefined;
-    const remaining = memory.unfinishedBuild.result.remaining.filter((b) => {
-      if (b.material !== null)
-        return observed.get(`${b.x},${b.y},${b.z}`) !== b.material;
-      const a = previous?.action;
-      return !(
-        previous?.result?.ok &&
-        a?.type === 'edit' &&
-        a.material === null &&
-        a.x === b.x &&
-        a.y === b.y &&
-        a.z === b.z
-      );
-    });
+    const remaining = memory.unfinishedBuild.result.remaining.filter((b) =>
+      b.material !== null
+        ? observed.get(key(b)) !== b.material
+        : !observedEmpty(raw, b),
+    );
     if (!remaining.length) memory.unfinishedBuild = undefined;
-    else memory.unfinishedBuild.result.remaining = remaining;
+    else {
+      memory.unfinishedBuild.result.remaining = remaining;
+      memory.unfinishedBuild.result.uncertain =
+        memory.unfinishedBuild.result.uncertain?.filter((b) =>
+          remaining.some((p) => key(p) === key(b)),
+        );
+    }
   }
   const message = addressed?.data as ChatData | undefined;
   const privateTo =
@@ -164,27 +153,19 @@ export async function runTaskStep(
   };
   let phase = '获取模型决策';
   try {
-    const decision = await planner.decide(observation, context, decisionSignal);
+    const input = await planner.decide(observation, context, decisionSignal);
     phase = '校验任务决策';
     decisionSignal.throwIfAborted();
-    let action = parseAction(decision, config.allowEdits);
-    const d = decision.task
-      ? parseTaskDirective(decision.task)
-      : {
-          intent: addressed ? ('reply' as const) : ('continue' as const),
-          status: ['wait', 'chat'].includes(action.type)
-            ? ('completed' as const)
-            : ('running' as const),
-          summary:
-            action.type === 'wait' ? '本次处理结束。' : '已处理当前请求。',
-        };
-    if (
-      ['reply', 'pause', 'cancel', 'resume'].includes(d.intent) &&
-      !['wait', 'chat'].includes(action.type)
-    )
+    let decision;
+    try {
+      decision = parseDecision(input, config.allowEdits);
+    } catch (error) {
       throw new AgentRuntimeError(
-        '回复或任务控制必须使用 chat / wait，不能附带移动或建造动作。',
+        error instanceof Error ? error.message : '模型决策格式无效。',
       );
+    }
+    let actions = decision.actions;
+    const d = decision.task;
     // Some providers repeat the existing task as "task" or "update" on polls.
     // Only normalize the same goal, retaining identity, audience and all budgets.
     if (
@@ -267,33 +248,18 @@ export async function runTaskStep(
       d.intent !== 'reply' &&
       d.status === 'completed' &&
       memory.unfinishedBuild &&
-      ['chat', 'wait'].includes(action.type)
+      actions.every((a) => ['chat', 'wait'].includes(a.type))
     ) {
       d.status = 'blocked';
       d.summary = `仍有 ${memory.unfinishedBuild.result.remaining.length} 个方块未确认完成，已停止并保留进度。`;
-      action = { type: 'chat', text: d.summary };
+      actions = [{ type: 'chat', text: d.summary }];
     }
-    // Always route task replies to their original private audience, even after later public messages.
-    const routed =
-      action.type === 'chat' && !addressed && task?.privateTo
-        ? { ...action, scope: 'private' as const, recipients: [task.privateTo] }
-        : action;
-    if ((action.type === 'build' || action.type === 'house') && chargedTask) {
-      const blocks =
-        action.type === 'house' ? houseBlocks(action) : action.blocks;
-      memory.unfinishedBuild = {
-        action,
-        result: {
-          ok: false,
-          total: blocks.length,
-          completed: 0,
-          skipped: 0,
-          remaining: blocks,
-          failures: [],
-          note: '执行中；若被暂停，继续时重新观察并跳过已有方块。',
-        },
-      };
-    }
+    const routed = actions.map(
+      (action): AgentAction =>
+        action.type === 'chat' && !addressed && task?.privateTo
+          ? { ...action, scope: 'private', recipients: [task.privateTo] }
+          : action,
+    );
     const actionLimit = new AbortController();
     const remaining = chargedTask
       ? Math.max(
@@ -304,27 +270,123 @@ export async function runTaskStep(
         )
       : config.timeoutMs;
     const timer = setTimeout(() => actionLimit.abort(), remaining);
-    let result;
+    let outcome;
+    // Keep older unfinished coordinates when a new batch only works on a subset.
+    const priorBuild = memory.unfinishedBuild;
     try {
-      phase = `执行 ${action.type} 动作`;
-      result = await executeAction(
+      phase = '执行动作序列';
+      outcome = await executeBatch(
         session,
         routed,
         observation,
         config.allowEdits,
         AbortSignal.any([decisionSignal, actionLimit.signal]),
-        log,
+        {
+          pending: (index) =>
+            (d.intent !== 'reply' || index > 0) && !!attention?.pending,
+          log,
+          beforeAction: (action) => {
+            if (
+              chargedTask &&
+              (action.type === 'build' || action.type === 'house')
+            ) {
+              const blocks =
+                action.type === 'house' ? houseBlocks(action) : action.blocks;
+              const extra =
+                priorBuild?.result.remaining.filter(
+                  (b) => !blocks.some((p) => key(p) === key(b)),
+                ) ?? [];
+              memory.unfinishedBuild = {
+                action,
+                result: {
+                  ok: false,
+                  total: blocks.length + extra.length,
+                  completed: 0,
+                  skipped: 0,
+                  remaining: [...extra, ...blocks],
+                  failures: [],
+                  note: '执行中；未确认的动作不会自动重放。',
+                },
+              };
+              checkpoint();
+            }
+          },
+          buildCheckpoint: (action, result) => {
+            if (!chargedTask) return;
+            const blocks =
+              action.type === 'house' ? houseBlocks(action) : action.blocks;
+            const extra =
+              priorBuild?.result.remaining.filter(
+                (b) => !blocks.some((p) => key(p) === key(b)),
+              ) ?? [];
+            const merged = {
+              ...result,
+              remaining: [...extra, ...result.remaining],
+              ok: result.ok && !extra.length,
+              total: result.total + extra.length,
+              uncertain: [
+                ...(priorBuild?.result.uncertain?.filter((b) =>
+                  extra.some((p) => key(p) === key(b)),
+                ) ?? []),
+                ...(result.uncertain ?? []),
+              ],
+            };
+            memory.unfinishedBuild = merged.ok
+              ? undefined
+              : { action, result: merged };
+          },
+          checkpoint: (batch) => {
+            if (d.intent !== 'reply') {
+              memory.previous = batch;
+              // Confirmed individual edits can also finish part of an older blueprint.
+              if (memory.unfinishedBuild) {
+                memory.unfinishedBuild.result.remaining =
+                  memory.unfinishedBuild.result.remaining.filter(
+                    (b) =>
+                      !batch.results.some(
+                        (r) =>
+                          r.status === 'succeeded' &&
+                          r.action.type === 'edit' &&
+                          key(r.action) === key(b) &&
+                          r.action.material === b.material,
+                      ),
+                  );
+                if (!memory.unfinishedBuild.result.remaining.length)
+                  memory.unfinishedBuild = undefined;
+              }
+            } else memory.lastReply = batch;
+            checkpoint();
+          },
+        },
       );
     } finally {
       clearTimeout(timer);
     }
+    const { batch, observation: finalObservation } = outcome;
+    if (
+      !signal.aborted &&
+      (actionLimit.signal.aborted || deadline.signal.aborted)
+    ) {
+      batch.stopReason = 'timeout';
+      batch.ok = false;
+    }
+    if (d.intent !== 'reply') memory.previous = batch;
+    else memory.lastReply = batch;
+    checkpoint();
     signal.throwIfAborted();
     phase = '更新任务进展';
     memory.failures = 0;
-    memory.decisionError = undefined;
+    if (d.intent !== 'reply') memory.decisionError = undefined;
+    const chats = batch.results.filter(
+      (r) => r.status === 'succeeded' && r.action.type === 'chat',
+    );
     if (d.intent === 'reply') {
-      if (action.type === 'wait') await notifySender(d.summary);
-      memory.lastResponse = action.type === 'chat' ? action.text : d.summary;
+      if (!chats.length)
+        await notifySender(
+          batch.ok ? d.summary : '本次回复未完成，请稍后重试。',
+        );
+      const last = chats.at(-1)?.action;
+      memory.lastResponse = last?.type === 'chat' ? last.text : d.summary;
       log(`消息已处理：${d.summary}`);
       return;
     }
@@ -337,65 +399,67 @@ export async function runTaskStep(
           ? 'cancelled'
           : d.status;
     task!.waitFor = 'waitFor' in d ? d.waitFor : undefined;
+    const acted = batch.results.filter((r) => r.status !== 'pending');
+    const mutated = acted.some((r) =>
+      ['edit', 'build', 'house', 'move'].includes(r.action.type),
+    );
     if (
-      ['edit', 'build', 'house', 'move'].includes(action.type) &&
-      task!.status === 'completed'
+      (mutated && task!.status === 'completed') ||
+      (acted.some((r) => r.action.type === 'move') &&
+        task!.status === 'waiting')
     ) {
       task!.status = 'running';
       task!.reason = '等待下一次观察验证执行结果。';
-    }
-    // A move needs a fresh self-position observation, not a block-change event.
-    if (action.type === 'move' && task!.status === 'waiting') {
-      task!.status = 'running';
-      task!.reason = '等待下一次观察验证移动结果。';
       task!.waitFor = undefined;
     }
-    if (!result.ok && task!.status === 'completed') {
-      task!.status = 'blocked';
-      task!.reason = '动作失败，任务尚未完成。';
+    if (!batch.ok && !['paused', 'cancelled'].includes(task!.status)) {
+      task!.status = 'running';
+      task!.reason = `批次中断：${batch.stopReason}，根据最新观察重新规划。`;
+      task!.waitFor = undefined;
     }
-    if (
-      (action.type === 'build' || action.type === 'house') &&
-      'remaining' in result
-    )
-      memory.unfinishedBuild = result.ok ? undefined : { action, result };
     if (task!.status === 'completed' && memory.unfinishedBuild) {
       task!.status = 'blocked';
       task!.reason = '仍有未完成的建造方块，不能标记完成。';
     }
     if (task!.status === 'cancelled') memory.unfinishedBuild = undefined;
-    memory.previous = { action, result };
     const progress = JSON.stringify([
-      raw.self?.x,
-      raw.self?.y,
-      raw.self?.z,
-      worldSignature(raw, 'world'),
+      finalObservation.self.x,
+      finalObservation.self.y,
+      finalObservation.self.z,
+      worldSignature(finalObservation, 'world'),
     ]);
-    const changedBlocks =
-      'completed' in result &&
-      typeof result.completed === 'number' &&
-      result.completed > 0;
-    memory.noProgress =
-      (!result.ok && !changedBlocks) ||
-      (progress === memory.lastProgress && !changedBlocks)
-        ? (memory.noProgress ?? 0) + 1
-        : 0;
-    memory.lastProgress = progress;
-    if (memory.noProgress >= 3 && task!.status === 'running') {
+    const advanced = batch.results.some(
+      (r) =>
+        (r.action.type === 'edit' && r.result?.ok) ||
+        (r.result && 'completed' in r.result && r.result.completed > 0) ||
+        (r.before &&
+          r.after &&
+          Math.hypot(
+            r.after.x - r.before.x,
+            r.after.y - r.before.y,
+            r.after.z - r.before.z,
+          ) >= 0.05),
+    );
+    if (batch.stopReason !== 'message') {
+      memory.noProgress =
+        !advanced && (!batch.ok || progress === memory.lastProgress)
+          ? (memory.noProgress ?? 0) + 1
+          : 0;
+      memory.lastProgress = progress;
+    }
+    if ((memory.noProgress ?? 0) >= 3 && task!.status === 'running') {
       task!.status = 'blocked';
       task!.reason = '连续三次失败或没有实际进展，已停止自动重试。';
     }
     if (task!.status === 'waiting')
-      memory.waitSignature = worldSignature(raw, task!.waitFor);
-    if (addressed && action.type !== 'chat')
+      memory.waitSignature = worldSignature(finalObservation, task!.waitFor);
+    if (addressed && !chats.length)
       await notifySender(
-        result.ok
+        batch.ok
           ? `收到。${task!.summary}`
           : '收到指令，但这次动作未成功，我会根据执行结果判断下一步。',
       );
-    log(
-      `${action.type} · 任务${task!.status}：${task!.reason || task!.summary}`,
-    );
+    log(`批次 · 任务${task!.status}：${task!.reason || task!.summary}`);
   } catch (error) {
     if (signal.aborted) return;
     memory.failures = (memory.failures ?? 0) + 1;

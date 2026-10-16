@@ -17,12 +17,13 @@ export async function executeAction(
   allowEdits: boolean,
   signal: AbortSignal,
   progress: (message: string) => void = () => {},
+  checkpoint: (result: BuildResult) => void = () => {},
 ): Promise<Result | BuildResult | { ok: boolean; note: string }> {
   signal.throwIfAborted();
   // Revalidate at the execution boundary as well as the provider boundary.
   action = parseAction(action, allowEdits);
   if (action.type === 'build' || action.type === 'house')
-    return executeBuild(session, action, signal, progress);
+    return executeBuild(session, action, signal, progress, checkpoint);
   if (action.type === 'wait') return { ok: true, note: '等待下一次观察。' };
   if (action.type === 'chat') {
     const { type: _, ...payload } = action;

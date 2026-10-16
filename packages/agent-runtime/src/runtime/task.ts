@@ -1,5 +1,10 @@
 import type { AgentTask, AgentUsage } from '@voxel/shared';
-import type { TaskDirective, BuildAction, BuildResult } from '../contracts';
+import type {
+  TaskDirective,
+  BuildAction,
+  BuildResult,
+  BatchResult,
+} from '../contracts';
 
 export function parseTaskDirective(value: unknown): TaskDirective {
   if (!value || typeof value !== 'object' || Array.isArray(value))
@@ -47,6 +52,7 @@ export type AgentRunState = {
   task?: AgentTask;
   usage?: AgentUsage;
   previous?: unknown;
+  lastReply?: BatchResult;
   unfinishedBuild?: { action: BuildAction; result: BuildResult };
   waitSignature?: string;
   failures?: number;
@@ -75,4 +81,25 @@ export function newTask(
     startedAt: Date.now(),
     elapsedMs: 0,
   };
+}
+
+/** Restore batch history only; in-flight effects remain unknown and never replay automatically. */
+export function restoreBatchHistory(value: unknown): BatchResult | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const candidate = value as BatchResult;
+  if (
+    !Array.isArray(candidate.actions) ||
+    !Array.isArray(candidate.results) ||
+    !Array.isArray(candidate.remaining)
+  )
+    return undefined;
+  const batch = structuredClone(candidate);
+  for (const result of batch.results) {
+    if (result.status === 'executing') result.status = 'unknown';
+  }
+  if (batch.stopReason === 'executing') {
+    batch.ok = false;
+    batch.stopReason = 'unknown';
+  }
+  return batch;
 }

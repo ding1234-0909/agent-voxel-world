@@ -78,7 +78,7 @@ const decision = (
   extra = {},
 ): AgentDecision =>
   ({
-    type: 'wait',
+    actions: [{ type: 'wait' }],
     task: { intent, status, summary: '进展记录', ...extra },
   }) as AgentDecision;
 
@@ -88,8 +88,7 @@ describe('task-driven wake decisions', () => {
     f.memory.task = { ...newTask('Build house'), status: 'completed' };
     f.message();
     f.planner.decide.mockResolvedValue({
-      type: 'chat',
-      text: '你好',
+      actions: [{ type: 'chat', text: '你好' }],
       task: { intent: 'reply', status: 'completed', summary: '已回复' },
     });
     await f.step();
@@ -107,11 +106,7 @@ describe('task-driven wake decisions', () => {
     f.message('放一块木头');
     f.planner.decide
       .mockResolvedValueOnce({
-        type: 'edit',
-        x: 1,
-        y: 3,
-        z: 0,
-        material: 'wood',
+        actions: [{ type: 'edit', x: 1, y: 3, z: 0, material: 'wood' }],
         task: {
           intent: 'task',
           status: 'completed',
@@ -120,8 +115,7 @@ describe('task-driven wake decisions', () => {
         },
       })
       .mockResolvedValueOnce({
-        type: 'chat',
-        text: '已经放好了',
+        actions: [{ type: 'chat', text: '已经放好了' }],
         task: {
           intent: 'continue',
           status: 'completed',
@@ -134,7 +128,9 @@ describe('task-driven wake decisions', () => {
     await f.step();
     await f.step();
     expect(f.planner.decide).toHaveBeenCalledTimes(2);
-    expect(f.planner.decide.mock.calls[1][1].previous.result.ok).toBe(true);
+    expect(
+      f.planner.decide.mock.calls[1][1].previous.results[0].result.ok,
+    ).toBe(true);
     expect(f.memory.task).toMatchObject({ status: 'completed', calls: 2 });
     expect(f.session.request).toHaveBeenLastCalledWith(
       'chat',
@@ -238,11 +234,7 @@ describe('task-driven wake decisions', () => {
     const f = fixture();
     f.message();
     f.planner.decide.mockResolvedValue({
-      type: 'edit',
-      x: 1,
-      y: 3,
-      z: 1,
-      material: null,
+      actions: [{ type: 'edit', x: 1, y: 3, z: 1, material: null }],
       task: { intent: 'reply', status: 'completed', summary: 'bad' },
     });
     await f.step();
@@ -281,7 +273,14 @@ describe('task-driven wake decisions', () => {
     f.memory.task = newTask('build');
     f.planner.decide.mockImplementation(async () => {
       abort.abort();
-      return { type: 'edit', x: 1, y: 3, z: 1, material: 'wood' };
+      return {
+        actions: [{ type: 'edit', x: 1, y: 3, z: 1, material: 'wood' }],
+        task: {
+          intent: 'continue' as const,
+          status: 'running' as const,
+          summary: '测试决策',
+        },
+      };
     });
     await f.step(cfg(), abort.signal);
     expect(f.session.request).not.toHaveBeenCalled();
@@ -290,7 +289,10 @@ describe('task-driven wake decisions', () => {
   it('nearby human speech wakes once without replaying old observation chat', async () => {
     const f = fixture();
     f.message('你好', 'nearby');
-    f.planner.decide.mockResolvedValue({ type: 'chat', text: '你好' });
+    f.planner.decide.mockResolvedValue({
+      actions: [{ type: 'chat', text: '你好' }],
+      task: { intent: 'reply', status: 'completed', summary: '已回复问候' },
+    });
     await f.step();
     await f.step();
     expect(f.planner.decide).toHaveBeenCalledTimes(1);
@@ -355,8 +357,7 @@ it('does not send a false completion report while a blueprint still has missing 
     },
   };
   f.planner.decide.mockResolvedValue({
-    type: 'chat',
-    text: '全部完成',
+    actions: [{ type: 'chat', text: '全部完成' }],
     task: { intent: 'continue', status: 'completed', summary: 'done' },
   });
   await f.step();
@@ -387,8 +388,7 @@ it('reports failed addressed decisions privately and leaves the previous task in
   expect(f.memory.usage?.calls).toBe(1);
   f.message('你好', 'public');
   f.planner.decide.mockResolvedValueOnce({
-    type: 'chat',
-    text: '你好',
+    actions: [{ type: 'chat', text: '你好' }],
     task: { intent: 'reply', status: 'completed', summary: '已回复' },
   });
   await f.step();
@@ -400,11 +400,7 @@ it('acknowledges a movement task and verifies position without waiting for block
   const f = fixture();
   f.message('到我这里来', 'public');
   f.planner.decide.mockResolvedValueOnce({
-    type: 'move',
-    x: 1,
-    z: 0,
-    jump: false,
-    durationMs: 100,
+    actions: [{ type: 'move', x: 1, z: 0, jump: false, durationMs: 100 }],
     task: {
       intent: 'task',
       goal: '走到玩家身边',
@@ -426,8 +422,7 @@ it('acknowledges a movement task and verifies position without waiting for block
   );
   f.observation.self.x = 1;
   f.planner.decide.mockResolvedValueOnce({
-    type: 'chat',
-    text: '已经到你身边了',
+    actions: [{ type: 'chat', text: '已经到你身边了' }],
     task: { intent: 'continue', status: 'completed', summary: '已确认到达' },
   });
   await f.step();
