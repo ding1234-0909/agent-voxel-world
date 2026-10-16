@@ -9,17 +9,19 @@
     "test:agent:deepseek": "tsx src/deepseek-integration.ts"
   },
   "dependencies": {
-    "@voxel/shared": "workspace:*",
     "@colyseus/core": "^0.16.24",
-    "@colyseus/ws-transport": "^0.16.5",
     "@colyseus/schema": "^3.0.69",
-    "express": "^4.21.2",
+    "@colyseus/ws-transport": "^0.16.5",
     "@prisma/client": "6.19.0",
-    "dotenv": "^16.6.1"
+    "@voxel/shared": "workspace:*",
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2",
+    "ws": "8.22.0"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
-    "prisma": "6.19.0",
-    "dotenv-cli": "^8.0.0"
+    "@types/ws": "8.18.2",
+    "dotenv-cli": "^8.0.0",
+    "prisma": "6.19.0"
   }
 }

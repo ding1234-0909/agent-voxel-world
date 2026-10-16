@@ -62,10 +62,16 @@ importers:
       express:
         specifier: ^4.21.2
         version: 4.22.3
+      ws:
+        specifier: 8.22.0
+        version: 8.22.0
     devDependencies:
       '@types/express':
         specifier: ^4.17.21
         version: 4.17.25
+      '@types/ws':
+        specifier: 8.18.2
+        version: 8.18.2
       dotenv-cli:
         specifier: ^8.0.0
         version: 8.0.0
