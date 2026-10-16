@@ -106,7 +106,7 @@ export class LocalRecorder {
       recorder.start(250);
       callbacks.onState(
         'listening',
-        '本机录音中，请说话后点击“结束录音”；20 秒后自动结束。',
+        '录音中，请说话后点击“结束录音”；20 秒后自动结束。',
       );
       this.timer = setTimeout(() => this.finish(), 20000);
     } catch (error) {
@@ -155,7 +155,7 @@ export class LocalRecorder {
     const controller = new AbortController();
     this.controller = controller;
     const timeout = setTimeout(() => controller.abort(), 110000);
-    callbacks.onState('thinking', 'Whisper 正在本机识别录音…');
+    callbacks.onState('thinking', '服务器上的 Whisper 正在识别录音…');
     try {
       const response = await fetch(
         `${serverHttpUrl()}/voice/transcribe?language=${language.startsWith('zh') ? 'zh' : 'en'}`,
@@ -169,7 +169,7 @@ export class LocalRecorder {
       const result = await response.json();
       if (!response.ok)
         throw Error(
-          typeof result.error === 'string' ? result.error : '本机识别失败。',
+          typeof result.error === 'string' ? result.error : '服务器识别失败。',
         );
       if (
         typeof result.text !== 'string' ||
@@ -182,12 +182,12 @@ export class LocalRecorder {
       if (generation === this.generation)
         callbacks.onError(
           controller.signal.aborted
-            ? '本机识别超时，请录制更短的语音后重试。'
+            ? '服务器识别超时，请录制更短的语音后重试。'
             : error instanceof TypeError
-              ? '无法连接本机识别服务，请确认项目服务正在运行。'
+              ? '无法连接服务器识别服务，请确认项目服务正在运行。'
               : error instanceof Error
                 ? error.message
-                : '本机识别失败，请重试。',
+                : '服务器识别失败，请重试。',
         );
     } finally {
       clearTimeout(timeout);

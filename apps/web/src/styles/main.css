@@ -801,6 +801,15 @@ footer {
   gap: 8px;
   margin: 16px 0;
 }
+.asr-service-status button {
+  margin-bottom: 16px;
+}
+.asr-help {
+  display: block;
+  color: #627767;
+  line-height: 1.6;
+  margin: 12px 0;
+}
 .voice-preview {
   border-top: 1px solid #d8e1d2;
   margin-top: 24px;

@@ -13,7 +13,7 @@ export function installSpeechRoutes(app: Express, speech = new LocalSpeech()) {
       (req.headers.origin && req.headers.origin !== origin) ||
       req.headers['sec-fetch-site'] === 'cross-site'
     ) {
-      res.status(403).json({ error: '不允许此页面访问本机语音服务。' });
+      res.status(403).json({ error: '不允许此页面访问服务器语音服务。' });
       return;
     }
     res.header('Cache-Control', 'no-store');
@@ -62,7 +62,7 @@ export function installSpeechRoutes(app: Express, speech = new LocalSpeech()) {
             error:
               error instanceof SpeechError
                 ? error.message
-                : '本机识别失败，请重试。',
+                : '服务器识别失败，请重试。',
           });
       } finally {
         res.off('close', cancel);

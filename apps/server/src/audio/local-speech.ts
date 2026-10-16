@@ -124,7 +124,8 @@ export class LocalSpeech {
         };
       return {
         available: true,
-        reason: '本机 Whisper 已就绪，录音只在本机识别。',
+        reason:
+          '自托管 Whisper 已就绪。音频上传至项目服务器，由服务器完成识别。',
       };
     } catch {
       return {
@@ -173,7 +174,10 @@ export class LocalSpeech {
       return { bytes, durationMs };
     } catch (error) {
       if (error instanceof SpeechError || signal.aborted) throw error;
-      throw new SpeechError('无法处理录音，请检查本机 ffmpeg 或重试。', 502);
+      throw new SpeechError(
+        '无法处理录音，请检查服务器上的 FFmpeg 或重试。',
+        502,
+      );
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -195,7 +199,7 @@ export class LocalSpeech {
     if (!['zh', 'en'].includes(language))
       throw new SpeechError('只支持中文或英文识别。');
     if (this.busy)
-      throw new SpeechError('本机正在识别另一段录音，请稍后重试。', 429);
+      throw new SpeechError('服务器正在识别另一段录音，请稍后重试。', 429);
     this.busy = true;
     let dir: string | undefined;
     try {
@@ -268,7 +272,7 @@ export class LocalSpeech {
     } catch (error) {
       if (error instanceof SpeechError || signal.aborted) throw error;
       throw new SpeechError(
-        '本机识别失败或超时，请使用有效短录音，并检查 Whisper 模型与工具。',
+        '服务器识别失败或超时，请使用有效短录音，并检查 Whisper 模型与工具。',
         502,
       );
     } finally {

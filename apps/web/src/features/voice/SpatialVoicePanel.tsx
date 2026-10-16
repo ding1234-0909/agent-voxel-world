@@ -119,7 +119,7 @@ export function SpatialVoicePanel({ connection }: { connection: Connection }) {
         </button>
       </div>
       <small>18 格内随距离、朝向变化 · {state.connected} 个语音连接</small>
-      <small>开启麦克风会同步本机转写，附近 Agent 自动接收。</small>
+      <small>开启麦克风会同步服务器转写，附近 Agent 自动接收。</small>
       <small>开启收听可听见附近 Agent 的语音回复；私聊仅接收者可听。</small>
       {state.agentSpeaking && (
         <p className="spatial-caption" role="status">

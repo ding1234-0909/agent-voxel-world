@@ -65,7 +65,7 @@ export class SpatialTranscriber {
   async start(stream: MediaStream) {
     this.stop();
     const generation = this.generation;
-    this.report({ status: '正在启动本机转写…', text: '', error: '' });
+    this.report({ status: '正在启动服务器转写…', text: '', error: '' });
     try {
       if (typeof MediaRecorder === 'undefined')
         throw Error('浏览器不支持语音分段录制。');
@@ -127,7 +127,7 @@ export class SpatialTranscriber {
           } else {
             this.release(id);
             this.report({
-              error: '本机转写跟不上讲话速度，已跳过一段以避免延迟累积。',
+              error: '服务器转写跟不上讲话速度，已跳过一段以避免延迟累积。',
             });
           }
         } else this.release(id);
@@ -146,7 +146,7 @@ export class SpatialTranscriber {
       recorder.start(200);
       this.report({
         status: this.working
-          ? '正在本机转写，同时继续收音…'
+          ? '正在服务器转写，同时继续收音…'
           : '正在听取附近讲话…',
       });
       const samples = new Float32Array(2048);
@@ -175,7 +175,7 @@ export class SpatialTranscriber {
         status: '实时音频仍可使用',
         error:
           (e as Error).name === 'AbortError'
-            ? '本机转写连接超时。'
+            ? '服务器转写连接超时。'
             : (e as Error).message,
       });
       this.retry = setTimeout(
@@ -190,7 +190,7 @@ export class SpatialTranscriber {
     try {
       while (this.queue.length && generation === this.generation) {
         const chunk = this.queue.shift()!;
-        this.report({ status: '正在本机转写，同时继续收音…' });
+        this.report({ status: '正在服务器转写，同时继续收音…' });
         try {
           const data = await this.api(chunk.id, 'POST', chunk.blob);
           if (generation === this.generation)
@@ -205,7 +205,7 @@ export class SpatialTranscriber {
               status: '实时音频仍可使用',
               error:
                 (e as Error).name === 'AbortError'
-                  ? '本机转写超时，已跳过此段。'
+                  ? '服务器转写超时，已跳过此段。'
                   : (e as Error).message,
             });
         } finally {

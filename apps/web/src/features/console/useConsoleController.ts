@@ -8,7 +8,9 @@ import { consoleApi } from './api';
 import { freshProvider, initialAgent } from './model';
 export function useConsoleController(open: boolean, initialTab?: 'agents') {
   const dialog = useRef<HTMLDialogElement>(null);
-  const [tab, setTab] = useState<'agents' | 'providers' | 'voice'>('agents');
+  const [tab, setTab] = useState<'agents' | 'providers' | 'voice' | 'asr'>(
+    'agents',
+  );
   const [providers, setProviders] = useState<ProviderView[]>([]);
   const [voiceServices, setVoiceServices] = useState<VoiceServiceView[]>([]);
   const [jobs, setJobs] = useState<ManagedAgentView[]>([]);

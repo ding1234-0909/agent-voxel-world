@@ -181,7 +181,7 @@ export function useChatController(connection: Connection) {
           setStatus(
             state === 'listening'
               ? '听写中，结束后可编辑再发送。'
-              : '正在本机识别…',
+              : '正在服务器识别…',
           );
         },
         onText: (value) => {
@@ -230,7 +230,7 @@ export function useChatController(connection: Connection) {
     upload.current = abort;
     try {
       if (clip) {
-        setStatus('正在上传并本机转写语音…');
+        setStatus('正在上传语音并由服务器转写…');
         const timer = setTimeout(() => abort.abort(), 125000);
         try {
           const data = await chatApi.uploadAudio(

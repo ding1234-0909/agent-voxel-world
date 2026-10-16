@@ -254,7 +254,7 @@ export function AgentForm({
             </select>
           </label>
           <p className="agent-hint">
-            在“语音服务”中统一配置音色。私聊仅指定接收者可听，玩家需开启附近语音收听。云端语音会将回复文字发送给对应服务商。
+            在“文本转语音（TTS）”中统一配置音色。私聊仅指定接收者可听，玩家需开启附近语音收听。云端语音会将回复文字发送给对应服务商。
           </p>
           {agent.voiceServiceId && (
             <VoicePreview

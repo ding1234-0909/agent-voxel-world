@@ -109,6 +109,7 @@ export function App({ connection }: { connection: Connection }) {
       )}
 
       <ControlConsole
+        connection={connection}
         open={consoleEntry !== null}
         initialTab={consoleEntry?.initialTab}
         onClose={() => setConsoleEntry(null)}

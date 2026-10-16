@@ -1,15 +1,23 @@
 import { VoiceServices } from './VoiceServices';
+import { SpeechRecognitionPanel } from '../voice/SpeechRecognitionPanel';
+import type { Connection } from '../../network/connection';
 import { useConsoleController } from './useConsoleController';
 import { isActive } from './model';
 import { ProviderEditor } from './ProviderEditor';
 import { AgentForm } from './AgentForm';
 import { AgentList } from './AgentList';
 type ConsoleProps = {
+  connection: Connection;
   open: boolean;
   initialTab?: 'agents';
   onClose: () => void;
 };
-export function ControlConsole({ open, initialTab, onClose }: ConsoleProps) {
+export function ControlConsole({
+  connection,
+  open,
+  initialTab,
+  onClose,
+}: ConsoleProps) {
   const controller = useConsoleController(open, initialTab);
   const {
     dialog,
@@ -84,15 +92,21 @@ export function ControlConsole({ open, initialTab, onClose }: ConsoleProps) {
             aria-pressed={tab === 'voice'}
             onClick={() => setTab('voice')}
           >
-            语音服务
+            文本转语音（TTS）
+          </button>
+          <button aria-pressed={tab === 'asr'} onClick={() => setTab('asr')}>
+            语音识别（ASR）
           </button>
         </nav>
       </div>
       <div className="agent-body" ref={body}>
         <div className="console-voice" hidden={tab !== 'voice'}>
           <div className="console-section-heading">
-            <h3>语音服务</h3>
-            <p>保存音色配置、试听效果，在创建 Agent 时直接选择使用。</p>
+            <h3>文本转语音（TTS）</h3>
+            <p>
+              将回复文字合成为声音。保存音色配置、试听效果，在创建 Agent
+              时选择使用。
+            </p>
           </div>
           {error && (
             <p role="alert" className="agent-error">
@@ -105,7 +119,13 @@ export function ControlConsole({ open, initialTab, onClose }: ConsoleProps) {
             active={open && tab === 'voice'}
           />
         </div>
-        <div hidden={tab === 'voice'}>
+        <div className="console-voice" hidden={tab !== 'asr'}>
+          <SpeechRecognitionPanel
+            connection={connection}
+            active={open && tab === 'asr'}
+          />
+        </div>
+        <div hidden={tab === 'voice' || tab === 'asr'}>
           {error && (
             <p role="alert" className="agent-error">
               {error}
