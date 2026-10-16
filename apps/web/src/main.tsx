@@ -1,3 +1,4 @@
+import { RealtimeVoicePanel } from './RealtimeVoicePanel';
 import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { type Material } from '@voxel/shared';
@@ -26,6 +27,7 @@ function App() {
     setActivePanel(null);
     setConsoleEntry({ initialTab });
   };
+  const [realtimeOpen, setRealtimeOpen] = useState(false);
   const [voiceActivity, setVoiceActivity] = useState('idle');
   const [name, setName] = useState(savedName ?? 'Explorer'),
     [joined, setJoined] = useState(!!savedName),
@@ -98,6 +100,18 @@ function App() {
               } as Record<string, string>
             )[voiceActivity] ?? ''}
           </button>
+          {joined && (
+            <button
+              className="exit-game"
+              onClick={() => {
+                if (document.pointerLockElement) document.exitPointerLock();
+                window.dispatchEvent(new Event('blur'));
+                setRealtimeOpen(true);
+              }}
+            >
+              百炼语音
+            </button>
+          )}
           {joined && (
             <nav className="game-panels" aria-label="游戏面板">
               <button
@@ -172,6 +186,12 @@ function App() {
           <div className="crosshair">+</div>
           <div className="target">{target}</div>
         </>
+      )}
+      {joined && realtimeOpen && (
+        <RealtimeVoicePanel
+          connection={connection}
+          onClose={() => setRealtimeOpen(false)}
+        />
       )}
       <ControlConsole
         open={consoleEntry !== null}

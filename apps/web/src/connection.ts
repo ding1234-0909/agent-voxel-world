@@ -1,3 +1,4 @@
+import type { RealtimeEvent } from '../../../packages/shared/src/realtime';
 import { Client, type Room } from 'colyseus.js';
 import {
   key,
@@ -54,6 +55,7 @@ export class Connection {
   }
   private clearCommunication() {
     this.chatToken = '';
+    this.onRealtimeReset();
     this.stopSpatialInput();
     for (const reply of this.replies.values()) {
       clearTimeout(reply.timer);
@@ -64,6 +66,8 @@ export class Connection {
   onChange = () => {};
   onBlocks = () => {};
   onVoice = (value: unknown) => {};
+  onRealtime: (value: RealtimeEvent) => void = () => {};
+  onRealtimeReset = () => {};
   private counter = 0;
   private stopped = false;
   private generation = 0;
@@ -178,6 +182,9 @@ export class Connection {
           }
         },
       );
+      room.onMessage('realtime', (value: RealtimeEvent) => {
+        if (activeRoom()) this.onRealtime(value);
+      });
       room.onMessage('voice', (value) => {
         if (activeRoom()) this.onVoice(value);
       });

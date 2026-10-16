@@ -5,6 +5,7 @@ export class DemoSocket extends EventEmitter implements RealtimeSocket {
   bufferedAmount = 0;
   private stopped = false;
   private turn = 0;
+  private edit: unknown;
   constructor() {
     super();
     queueMicrotask(() => {
@@ -15,6 +16,20 @@ export class DemoSocket extends EventEmitter implements RealtimeSocket {
     const event = JSON.parse(raw);
     if (event.type === 'session.update')
       this.deliver({ type: 'session.updated' });
+    if (
+      event.type === 'conversation.item.create' &&
+      event.item.call_id === 'demo-observe'
+    ) {
+      const data = JSON.parse(event.item.output);
+      const block = data.blocks?.find(
+        (b: any) =>
+          b.y > 0 &&
+          b.material === 'grass' &&
+          Math.hypot(b.x - data.self.x, b.z - data.self.z) > 1,
+      );
+      if (block)
+        this.edit = { x: block.x, y: block.y, z: block.z, material: null };
+    }
     if (event.type === 'response.create') {
       const id = `demo-${++this.turn}`;
       this.deliver({ type: 'response.created', response: { id } });
@@ -25,6 +40,14 @@ export class DemoSocket extends EventEmitter implements RealtimeSocket {
           call_id: 'demo-observe',
           name: 'observe_scene',
           arguments: '{}',
+        });
+      } else if (this.turn === 2 && this.edit) {
+        this.deliver({
+          type: 'response.function_call_arguments.done',
+          response_id: id,
+          call_id: 'demo-edit',
+          name: 'propose_block_edit',
+          arguments: JSON.stringify(this.edit),
         });
       } else {
         const pcm = Buffer.alloc(12000);

@@ -1,6 +1,7 @@
 import type { Edit } from './index';
 export type RealtimeEvent = {
   session: string;
+  request?: string;
   kind:
     | 'ready'
     | 'subtitle'

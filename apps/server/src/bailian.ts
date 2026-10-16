@@ -106,7 +106,14 @@ export class BailianSession {
     const model = config.model ?? 'qwen-audio-3.1-realtime-plus';
     if (!['qwen-audio-3.1-realtime-plus'].includes(model))
       throw Error('unsupported-model');
-    const token = this.demo ? '' : config.credential();
+    if (this.demo && dial === productionDial)
+      throw Error('demo-transport-required');
+    let token = '';
+    try {
+      token = this.demo ? '' : config.credential();
+    } catch {
+      throw Error('server-credential-unavailable');
+    }
     if (!this.demo && !token) throw Error('missing-server-credential');
     try {
       this.socket = dial(

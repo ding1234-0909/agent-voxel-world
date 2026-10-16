@@ -1,3 +1,4 @@
+import { RealtimeHub } from './realtime-hub';
 import { WorldChat } from './chat';
 import { AgentSpeech } from './agent-speech';
 import { createVoiceProvider, type VoiceSession } from './voice';
@@ -82,6 +83,25 @@ export class WorldRoom extends Room<WorldState> {
   private ownsActive = false;
   private voiceProvider = createVoiceProvider();
   private voices = new Map<string, VoiceSession>();
+  private realtime = new RealtimeHub(
+    (owner) => ({
+      revision: () => this.state.revision,
+      observe: () => {
+        const player = this.state.players.get(owner);
+        if (!player?.connected) throw Error('disconnected');
+        return {
+          revision: this.state.revision,
+          self: { x: player.x, y: player.y, z: player.z, yaw: player.yaw },
+          blocks: [...this.blocks.values()]
+            .filter((b) => distance(b, player) <= 6)
+            .sort((a, b) => distance(a, player) - distance(b, player))
+            .slice(0, 64),
+        };
+      },
+    }),
+    (owner, event) =>
+      this.clients.find((c) => c.sessionId === owner)?.send('realtime', event),
+  );
   private queue: Promise<void> = Promise.resolve();
   autoDispose = false;
   maxClients = 16;
@@ -110,7 +130,27 @@ export class WorldRoom extends Room<WorldState> {
         value.id.length > 80
       )
         return this.reply(client, '', false, 'invalid-envelope');
-      const { id, type, payload } = value;
+      let { id, type, payload } = value;
+      if (typeof type === 'string' && type.startsWith('realtime.')) {
+        try {
+          if (this.state.players.get(client.sessionId)?.kind !== 'human')
+            throw Error('human-session-required');
+          if (type === 'realtime.approve') {
+            payload = this.realtime.approve(client.sessionId, payload);
+            type = 'edit'; // Reuse the authoritative serialized edit validation and persistence below.
+          } else {
+            this.realtime.handle(client.sessionId, type, payload);
+            return this.reply(client, id, true);
+          }
+        } catch (error) {
+          return this.reply(
+            client,
+            id,
+            false,
+            error instanceof Error ? error.message : 'realtime-failed',
+          );
+        }
+      }
       if (type === 'agent.voice') {
         const player = this.state.players.get(client.sessionId);
         if (
@@ -367,6 +407,7 @@ export class WorldRoom extends Room<WorldState> {
     this.event('joined', p.id, { name: p.name, kind: p.kind });
   }
   async onLeave(client: Client, consented: boolean) {
+    this.realtime.close(client.sessionId);
     this.agentSpeech.cancel(client.sessionId);
     this.voices.get(client.sessionId)?.close();
     this.voices.delete(client.sessionId);
@@ -398,6 +439,7 @@ export class WorldRoom extends Room<WorldState> {
     this.event('left', client.sessionId, {});
   }
   async onDispose() {
+    this.realtime.dispose();
     this.agentSpeech.close();
     for (const voice of this.voices.values()) voice.close();
     this.voices.clear();
