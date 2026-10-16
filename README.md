@@ -31,7 +31,7 @@ pnpm agent
 - 地形碰撞、重力、速度、编辑距离、基岩保护、玩家占用、相邻支撑和版本冲突均由服务器校验。
 - 聊天支持群聊、@ 私聊、语音转文字和语音消息；附近语音可独立开启麦克风与收听，按距离和朝向调节音量，并自动分段转写给附近玩家与 Agent。详见 [聊天与空间语音](docs/CHAT.md)。开启 Agent 的语音回复后，附近已开启收听的玩家可听到它的声音，私聊只对指定对象播放。玩家位置以 20Hz 权威更新，画面进行插值。
 - 页面刷新自动使用当前标签页的昵称和重连令牌；异常断线 20 秒内可保留身份，超时或服务器重启则重新入房。
-- Voice Lab 支持语音回声、Ollama 本地 AI 对话和文字 mock。默认使用本机 Whisper 识别，支持中文/英文、麦克风/音频文件、文字输入、朗读和打断；用 `pnpm voice:setup` 准备本地模型。无需 Google Cloud 账号或信用卡，详见 [语音配置](docs/VOICE.md)。
+- 控制台的“语音服务”以左侧列表、右侧配置管理本机、百炼及兼容接口的音色，支持保存与试听。创建或编辑 Agent 时选择已保存服务，实际回复按所选音色发声；聊天与附近语音仍用本机 Whisper 转写。详见 [语音配置](docs/VOICE.md)。
 
 ## 验证
 
@@ -71,7 +71,7 @@ apps/server/
     └── sandbox/            # 独立沙盒启动入口
 ```
 
-`pnpm test:agents`、`pnpm test:chat`、`pnpm test:agent:voice`、`pnpm test:agent:tasks` 和 `pnpm test:agent:deepseek` 指向服务端集成脚本，使用隔离世界和固定模型响应。实时会话集成与沙盒命令见 [百炼实时语音](docs/ALIYUN_REALTIME.md)。这些脚本由 `tsx` 显式运行，不进入默认 Vitest 扫描；根目录 `pnpm test:integration` 仍是需要已启动服务的 Agent 客户端集成检查。
+`pnpm test:voice:services`、`pnpm test:agents`、`pnpm test:chat`、`pnpm test:agent:voice`、`pnpm test:agent:tasks` 和 `pnpm test:agent:deepseek` 指向服务端集成脚本，使用隔离世界和固定模型响应。实时会话集成与沙盒命令见 [百炼实时语音](docs/ALIYUN_REALTIME.md)。这些脚本由 `tsx` 显式运行，不进入默认 Vitest 扫描；根目录 `pnpm test:integration` 仍是需要已启动服务的 Agent 客户端集成检查。
 
 前端按功能与基础设施组织：
 

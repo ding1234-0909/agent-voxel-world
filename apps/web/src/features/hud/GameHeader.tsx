@@ -2,25 +2,16 @@ interface GameHeaderProps {
   connectionStatus: string;
   joined: boolean;
   isConsoleOpen: boolean;
-  voiceActivity: string;
   isPlayersOpen: boolean;
   onOpenConsole: () => void;
   onTogglePlayers: () => void;
   onLeaveWorld: () => void;
 }
 
-const VOICE_ACTIVITY_LABELS: Record<string, string> = {
-  listening: ' · 录音中',
-  transcribing: ' · 识别中',
-  thinking: ' · 回复中',
-  speaking: ' · 朗读中',
-};
-
 export function GameHeader({
   connectionStatus,
   joined,
   isConsoleOpen,
-  voiceActivity,
   isPlayersOpen,
   onOpenConsole,
   onTogglePlayers,
@@ -48,7 +39,6 @@ export function GameHeader({
           onClick={onOpenConsole}
         >
           控制台
-          {VOICE_ACTIVITY_LABELS[voiceActivity] ?? ''}
         </button>
         {joined && (
           <nav className="game-panels" aria-label="游戏面板">

@@ -789,6 +789,38 @@ footer {
   grid-template-columns: 1fr 1fr;
   gap: 32px;
 }
+.voice-services-layout {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.8fr) minmax(0, 1.6fr);
+  gap: 32px;
+  align-items: start;
+}
+.voice-service-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 16px 0;
+}
+.voice-preview {
+  border-top: 1px solid #d8e1d2;
+  margin-top: 24px;
+  padding-top: 12px;
+}
+.voice-preview small {
+  display: block;
+  color: #627767;
+  line-height: 1.6;
+}
+.voice-preview audio {
+  width: 100%;
+  margin-top: 12px;
+}
+@media (max-width: 700px) {
+  .voice-services-layout {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+}
 .agent-dialog h3 {
   font-size: 15px;
   margin: 0 0 16px;

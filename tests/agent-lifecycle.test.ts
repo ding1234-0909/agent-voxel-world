@@ -3,6 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AgentManager, ProviderStore } from '../apps/server/src/agent/manager';
+import { VoiceServiceStore } from '../apps/server/src/audio/voice-services';
 import {
   AgentRuntimeError,
   type Planner,
@@ -62,20 +63,70 @@ function setup(
       summary: '测试决策',
     },
   })),
+  voices?: VoiceServiceStore,
 ) {
-  manager = new AgentManager(store, 'ws://fixture', {
-    session: () => s as unknown as Session,
-    planner: () => ({ decide }),
-    models: async () => [],
-  });
+  manager = new AgentManager(
+    store,
+    'ws://fixture',
+    {
+      session: () => s as unknown as Session,
+      planner: () => ({ decide }),
+      models: async () => [],
+    },
+    voices,
+  );
   return manager;
 }
 const settings = {
+  voiceServiceId: 'local-default',
   providerId: 'deepseek',
   name: 'Reusable',
   goal: 'Wait',
   maxTurns: 1,
 };
+it('protects a new voice binding while an Agent update is waiting for the world', async () => {
+  const voices = new VoiceServiceStore(join(dir, 'voices.json'));
+  await voices.load();
+  const next = await voices.save({ name: 'Next', type: 'local' });
+  const session = fakeSession();
+  const m = setup(session, undefined, voices);
+  const job = m.create({ ...settings, voiceReplies: true });
+  await vi.waitFor(() => expect(m.list()[0].status).toBe('idle'));
+  let release!: () => void;
+  session.request.mockImplementationOnce(async () => {
+    await new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return { ok: true };
+  });
+  const updating = m.update(job.id, {
+    voiceServiceId: next.id,
+    voiceReplies: false,
+  });
+  await expect(m.removeVoiceService(next.id)).rejects.toThrow();
+  release();
+  await updating;
+  expect(m.list()[0].voiceServiceId).toBe(next.id);
+  await expect(m.removeVoiceService(next.id)).rejects.toThrow();
+  await m.update(job.id, { voiceServiceId: '', voiceReplies: false });
+  await m.removeVoiceService(next.id);
+});
+it('restores a missing voice service as text-only without model calls', async () => {
+  const voices = new VoiceServiceStore(join(dir, 'voices.json'));
+  await voices.load();
+  const m = setup(fakeSession(), undefined, voices);
+  m.create({ ...settings, voiceReplies: true });
+  await vi.waitFor(() => expect(m.list()[0].status).toBe('idle'));
+  await m.close();
+  await voices.remove('local-default', () => false);
+  const decide = vi.fn();
+  const restored = setup(fakeSession(), decide, voices);
+  await restored.load();
+  expect(restored.list()[0].voiceReplies).toBe(false);
+  expect(restored.list()[0].voiceServiceId).toBe('');
+  expect(restored.list()[0].logs.join('\n')).toContain('原语音服务不可用');
+  expect(decide).not.toHaveBeenCalled();
+});
 it('toggles voice during inference without restarting the agent or making another model call', async () => {
   let release!: () => void;
   const s = fakeSession();

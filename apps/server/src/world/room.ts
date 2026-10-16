@@ -1,6 +1,8 @@
 import { RealtimeHub } from '../realtime/hub';
 import { WorldChat } from '../chat/chat';
 import { AgentSpeech } from '../agent/speech';
+import type { VoiceServiceStore } from '../audio/voice-services';
+import { LocalTts } from '../audio/local-tts';
 import { createVoiceProvider, type VoiceSession } from '../audio/voice';
 import { WorldStore } from './store';
 import { Room, Client } from '@colyseus/core';
@@ -55,6 +57,8 @@ defineTypes(WorldState, { players: { map: Avatar }, revision: 'number' });
 const zero: Input = { x: 0, z: 0, jump: false, yaw: 0 };
 let activeRoom = false;
 export class WorldRoom extends Room<WorldState> {
+  private voiceServices?: VoiceServiceStore;
+  private releaseVoiceServices?: () => void;
   agentSpeech = new AgentSpeech(
     () => this.state.players.values(),
     (recipient, event) =>
@@ -65,6 +69,7 @@ export class WorldRoom extends Room<WorldState> {
       this.clients
         .find((c) => c.sessionId === actor)
         ?.send('agent.speech.error', { message }),
+    (actor) => this.voiceServices?.forActor(actor) ?? new LocalTts(),
   );
   chat = new WorldChat(
     () => this.state.players.values(),
@@ -105,7 +110,11 @@ export class WorldRoom extends Room<WorldState> {
   private queue: Promise<void> = Promise.resolve();
   autoDispose = false;
   maxClients = 16;
-  async onCreate() {
+  async onCreate(options: { voiceServices?: VoiceServiceStore } = {}) {
+    this.voiceServices = options.voiceServices;
+    this.releaseVoiceServices = this.voiceServices?.onChange((actor) =>
+      this.agentSpeech.cancel(actor),
+    );
     if (activeRoom)
       throw new Error('Single world is full; join the existing room');
     activeRoom = true;
@@ -439,6 +448,7 @@ export class WorldRoom extends Room<WorldState> {
     this.event('left', client.sessionId, {});
   }
   async onDispose() {
+    this.releaseVoiceServices?.();
     this.realtime.dispose();
     this.agentSpeech.close();
     for (const voice of this.voices.values()) voice.close();

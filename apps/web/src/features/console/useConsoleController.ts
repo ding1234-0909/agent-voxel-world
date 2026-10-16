@@ -1,11 +1,16 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import type { ManagedAgentView, ProviderView } from '@voxel/shared';
+import type {
+  ManagedAgentView,
+  ProviderView,
+  VoiceServiceView,
+} from '@voxel/shared';
 import { consoleApi } from './api';
 import { freshProvider, initialAgent } from './model';
 export function useConsoleController(open: boolean, initialTab?: 'agents') {
   const dialog = useRef<HTMLDialogElement>(null);
   const [tab, setTab] = useState<'agents' | 'providers' | 'voice'>('agents');
   const [providers, setProviders] = useState<ProviderView[]>([]);
+  const [voiceServices, setVoiceServices] = useState<VoiceServiceView[]>([]);
   const [jobs, setJobs] = useState<ManagedAgentView[]>([]);
   const [agent, setAgent] = useState(initialAgent);
   const [editingAgent, setEditingAgent] = useState<string>();
@@ -56,6 +61,15 @@ export function useConsoleController(open: boolean, initialTab?: 'agents') {
     const previous = document.activeElement as HTMLElement | null;
     element.showModal();
     const abort = new AbortController();
+    void consoleApi
+      .listVoiceServices(abort.signal)
+      .then((list) => {
+        if (!abort.signal.aborted) setVoiceServices(list);
+      })
+      .catch((e) => {
+        if (!abort.signal.aborted)
+          setError(e instanceof Error ? e.message : '无法读取语音服务。');
+      });
     void consoleApi
       .listProviders(abort.signal)
       .then((list) => {
@@ -258,6 +272,8 @@ export function useConsoleController(open: boolean, initialTab?: 'agents') {
     tab,
     setTab,
     providers,
+    voiceServices,
+    setVoiceServices,
     jobs,
     agent,
     setAgent,

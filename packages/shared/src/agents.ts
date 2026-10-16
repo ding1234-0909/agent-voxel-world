@@ -28,6 +28,7 @@ export type AgentSettings = {
   maxTokens: number;
   allowEdits: boolean;
   voiceReplies?: boolean;
+  voiceServiceId?: string;
   thinking: 'enabled' | 'disabled';
   reasoningEffort: 'none' | 'low' | 'high' | 'max';
 };
@@ -56,6 +57,7 @@ export type AgentTask = {
 };
 export type AgentUsage = { calls: number; tokens: number; estimated: boolean };
 export type ManagedAgentView = AgentSettings & {
+  voiceServiceName?: string;
   id: string;
   providerName: string;
   status:

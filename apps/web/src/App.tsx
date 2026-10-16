@@ -19,7 +19,6 @@ export function App({ connection }: { connection: Connection }) {
     initialTab?: 'agents';
   } | null>(null);
   const [showControls, setShowControls] = useState(false);
-  const [voiceActivity, setVoiceActivity] = useState('idle');
   const [name, setName] = useState(savedName ?? 'Explorer');
   const [joined, setJoined] = useState(!!savedName);
 
@@ -78,7 +77,6 @@ export function App({ connection }: { connection: Connection }) {
         connectionStatus={connection.status}
         joined={joined}
         isConsoleOpen={consoleEntry !== null}
-        voiceActivity={voiceActivity}
         isPlayersOpen={activePanel === 'players'}
         onOpenConsole={() => openConsole()}
         onTogglePlayers={() =>
@@ -114,9 +112,6 @@ export function App({ connection }: { connection: Connection }) {
         open={consoleEntry !== null}
         initialTab={consoleEntry?.initialTab}
         onClose={() => setConsoleEntry(null)}
-        connection={connection}
-        onJoin={joinWorld}
-        onActivityChange={setVoiceActivity}
       />
 
       {joined && (

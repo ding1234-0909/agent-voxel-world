@@ -26,7 +26,9 @@ export class AgentSpeech {
     private players: () => Iterable<Player>,
     private notify: (recipient: string, event: AgentSpeechEvent) => void,
     private report: (actor: string, message: string) => void,
-    private tts: SpeechSynthesizer = new LocalTts(),
+    private tts:
+      | SpeechSynthesizer
+      | ((actor: string) => SpeechSynthesizer) = new LocalTts(),
   ) {}
   private speaker(actor: string) {
     return [...this.players()].find(
@@ -92,7 +94,9 @@ export class AgentSpeech {
     try {
       if (!this.speaker(pending.actor) || Date.now() - pending.at > 30000)
         return;
-      const audio = await this.tts.synthesize(
+      const tts =
+        typeof this.tts === 'function' ? this.tts(pending.actor) : this.tts;
+      const audio = await tts.synthesize(
         pending.data.text,
         pending.controller.signal,
       );

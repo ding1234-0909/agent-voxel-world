@@ -1,20 +1,15 @@
-import type { ComponentProps } from 'react';
-import { VoicePanel } from '../voice/VoicePanel';
+import { VoiceServices } from './VoiceServices';
 import { useConsoleController } from './useConsoleController';
 import { isActive } from './model';
 import { ProviderEditor } from './ProviderEditor';
 import { AgentForm } from './AgentForm';
 import { AgentList } from './AgentList';
-type ConsoleProps = Omit<
-  ComponentProps<typeof VoicePanel>,
-  'hidden' | 'onClose' | 'active'
-> & { open: boolean; initialTab?: 'agents'; onClose: () => void };
-export function ControlConsole({
-  open,
-  initialTab,
-  onClose,
-  ...voiceProps
-}: ConsoleProps) {
+type ConsoleProps = {
+  open: boolean;
+  initialTab?: 'agents';
+  onClose: () => void;
+};
+export function ControlConsole({ open, initialTab, onClose }: ConsoleProps) {
   const controller = useConsoleController(open, initialTab);
   const {
     dialog,
@@ -89,17 +84,26 @@ export function ControlConsole({
             aria-pressed={tab === 'voice'}
             onClick={() => setTab('voice')}
           >
-            语音设置
+            语音服务
           </button>
         </nav>
       </div>
       <div className="agent-body" ref={body}>
         <div className="console-voice" hidden={tab !== 'voice'}>
           <div className="console-section-heading">
-            <h3>语音设置</h3>
-            <p>选择接入方案，设置并试用语音对话。</p>
+            <h3>语音服务</h3>
+            <p>保存音色配置、试听效果，在创建 Agent 时直接选择使用。</p>
           </div>
-          <VoicePanel {...voiceProps} active={open && tab === 'voice'} />
+          {error && (
+            <p role="alert" className="agent-error">
+              {error}
+            </p>
+          )}
+          <VoiceServices
+            services={controller.voiceServices}
+            onChange={controller.setVoiceServices}
+            active={open && tab === 'voice'}
+          />
         </div>
         <div hidden={tab === 'voice'}>
           {error && (
@@ -115,7 +119,7 @@ export function ControlConsole({
           {tab === 'providers' ? (
             <ProviderEditor {...controller} />
           ) : showAgentForm ? (
-            <AgentForm {...controller} />
+            <AgentForm {...controller} active={open && tab === 'agents'} />
           ) : (
             <AgentList {...controller} />
           )}

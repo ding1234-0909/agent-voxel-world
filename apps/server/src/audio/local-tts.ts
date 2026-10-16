@@ -13,6 +13,7 @@ export interface SpeechSynthesizer {
 
 /** Server-local TTS; outputs a file, never the server's speakers. */
 export class LocalTts implements SpeechSynthesizer {
+  constructor(private options: { voice?: string; speed?: number } = {}) {}
   async status() {
     const available =
       process.platform === 'darwin' &&
@@ -41,9 +42,11 @@ export class LocalTts implements SpeechSynthesizer {
         output = join(dir, 'speech.wav');
       // File input keeps model text out of shell syntax and command options.
       await writeFile(input, text, { mode: 0o600 });
-      const voice = /[\u3400-\u9fff]/u.test(text)
-        ? (process.env.TTS_VOICE_ZH ?? 'Tingting')
-        : (process.env.TTS_VOICE_EN ?? 'Samantha');
+      const voice =
+        this.options.voice ||
+        (/[\u3400-\u9fff]/u.test(text)
+          ? (process.env.TTS_VOICE_ZH ?? 'Tingting')
+          : (process.env.TTS_VOICE_EN ?? 'Samantha'));
       const options = {
         signal,
         timeout: 30000,
@@ -52,7 +55,16 @@ export class LocalTts implements SpeechSynthesizer {
       };
       await exec(
         '/usr/bin/say',
-        ['-v', voice, '-r', '200', '-f', input, '-o', source],
+        [
+          '-v',
+          voice,
+          '-r',
+          String(Math.round(200 * (this.options.speed ?? 1))),
+          '-f',
+          input,
+          '-o',
+          source,
+        ],
         options,
       );
       await exec(

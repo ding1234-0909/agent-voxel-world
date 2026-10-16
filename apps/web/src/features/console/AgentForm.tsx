@@ -1,10 +1,13 @@
 import { AgentAdvancedSettings } from './AgentAdvancedSettings';
 import type { AgentSettings } from '@voxel/shared';
 import type { ConsoleController } from './useConsoleController';
+import { VoicePreview } from './VoicePreview';
 
 type Props = Pick<
   ConsoleController,
   | 'providers'
+  | 'voiceServices'
+  | 'tab'
   | 'agent'
   | 'setAgent'
   | 'editingAgent'
@@ -18,9 +21,12 @@ type Props = Pick<
   | 'chooseProvider'
   | 'readModels'
   | 'saveAgent'
->;
+> & { active: boolean };
 export function AgentForm({
   providers,
+  voiceServices,
+  tab,
+  active,
   agent,
   setAgent,
   editingAgent,
@@ -227,19 +233,36 @@ export function AgentForm({
             />
             允许放置 / 移除方块
           </label>
-          <label className="agent-check">
-            <input
-              type="checkbox"
-              checked={!!agent.voiceReplies}
+          <label>
+            语音服务
+            <select
+              value={agent.voiceServiceId || ''}
               onChange={(e) =>
-                setAgent({ ...agent, voiceReplies: e.target.checked })
+                setAgent({
+                  ...agent,
+                  voiceServiceId: e.target.value,
+                  voiceReplies: !!e.target.value,
+                })
               }
-            />
-            语音回复（附近玩家可听见）
+            >
+              <option value="">关闭语音 · 仅文字回复</option>
+              {voiceServices.map((service) => (
+                <option key={service.id} value={service.id}>
+                  {service.name} · {service.voice || '自动音色'}
+                </option>
+              ))}
+            </select>
           </label>
           <p className="agent-hint">
-            使用服务器本机语音合成；私聊仅指定接收者可听，玩家需开启附近语音收听。
+            在“语音服务”中统一配置音色。私聊仅指定接收者可听，玩家需开启附近语音收听。云端语音会将回复文字发送给对应服务商。
           </p>
+          {agent.voiceServiceId && (
+            <VoicePreview
+              serviceId={agent.voiceServiceId}
+              active={active && tab === 'agents'}
+              disabled={busy}
+            />
+          )}
           <p className="agent-hint">
             {editingAgent
               ? '保存后保持当前状态，下次运行使用新参数。'

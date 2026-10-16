@@ -6,6 +6,7 @@ import express, {
   type NextFunction,
 } from 'express';
 import { AgentManager, ManagementError } from '../agent/manager';
+import { SpeechError } from '../audio/local-speech';
 export function installAgentRoutes(app: Express, manager: AgentManager) {
   const origin = process.env.WEB_ORIGIN ?? 'http://127.0.0.1:5173';
   app.use(
@@ -43,6 +44,56 @@ export function installAgentRoutes(app: Express, manager: AgentManager) {
         .then(() => fn(req, res))
         .catch(next);
     };
+  const voices = () => {
+    if (!manager.voiceServices)
+      throw new ManagementError('语音服务未就绪。', 503);
+    return manager.voiceServices;
+  };
+  app.get(
+    '/agents/voice-services',
+    route((_req, res) => res.json(voices().list())),
+  );
+  app.post(
+    '/agents/voice-services',
+    route(async (req, res) =>
+      res.status(201).json(await voices().save(req.body)),
+    ),
+  );
+  app.put(
+    '/agents/voice-services/:id',
+    route(async (req, res) =>
+      res.json(await voices().save(req.body, String(req.params.id))),
+    ),
+  );
+  app.delete(
+    '/agents/voice-services/:id',
+    route(async (req, res) => {
+      await manager.removeVoiceService(String(req.params.id));
+      res.sendStatus(204);
+    }),
+  );
+  app.post(
+    '/agents/voice-services/:id/preview',
+    route(async (req, res) => {
+      const abort = new AbortController();
+      const cancel = () => {
+        if (!res.writableEnded) abort.abort();
+      };
+      res.on('close', cancel);
+      try {
+        const audio = await voices().synthesize(
+          String(req.params.id),
+          req.body?.text,
+          abort.signal,
+        );
+        if (!abort.signal.aborted) res.type('audio/wav').send(audio.bytes);
+      } catch (error) {
+        if (!abort.signal.aborted) throw error;
+      } finally {
+        res.off('close', cancel);
+      }
+    }),
+  );
   app.get(
     '/agents/providers',
     route((_req, res) => res.json(manager.providers.list())),
@@ -119,7 +170,7 @@ export function installAgentRoutes(app: Express, manager: AgentManager) {
     res.status(404).json({ error: 'Agent 接口不存在，请确认前后端版本一致。' });
   });
   const errors: ErrorRequestHandler = (error, _req, res, _next) => {
-    if (error instanceof ManagementError)
+    if (error instanceof ManagementError || error instanceof SpeechError)
       res.status(error.status).json({ error: error.message });
     else
       res

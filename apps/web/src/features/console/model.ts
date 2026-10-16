@@ -62,7 +62,8 @@ export const initialAgent: AgentSettings = {
   timeoutMs: 60000,
   maxTokens: 512,
   allowEdits: false,
-  voiceReplies: true,
+  voiceReplies: false,
+  voiceServiceId: '',
   thinking: 'disabled',
   reasoningEffort: 'high',
 };

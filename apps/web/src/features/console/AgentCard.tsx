@@ -197,14 +197,23 @@ export function AgentCard({
           <span>
             {job.allowEdits ? '允许建造' : '仅探索与交流'} ·{' '}
             {job.voiceReplies ? '语音回复开启' : '语音回复关闭'}
+            {job.voiceServiceName ? ` · ${job.voiceServiceName}` : ''}
           </span>
         </div>
         <button
-          disabled={busy || ['joining', 'stopping'].includes(job.status)}
+          disabled={
+            busy ||
+            !job.voiceServiceId ||
+            ['joining', 'stopping'].includes(job.status)
+          }
           aria-pressed={!!job.voiceReplies}
           onClick={() => void toggleVoiceReplies(job)}
         >
-          {job.voiceReplies ? '关闭语音回复' : '开启语音回复'}
+          {!job.voiceServiceId
+            ? '请先编辑参数选择语音服务'
+            : job.voiceReplies
+              ? '关闭语音回复'
+              : '开启语音回复'}
         </button>
       </details>
       <AgentLogViewer job={job} />

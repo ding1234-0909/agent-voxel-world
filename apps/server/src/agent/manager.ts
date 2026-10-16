@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile, rename, unlink } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { VoiceServiceStore } from '../audio/voice-services';
 import type {
   ChatData,
   AgentSettings,
@@ -209,6 +210,12 @@ export function validateAgent(
     ),
     allowEdits: boolean(input.allowEdits, false),
     voiceReplies: boolean(input.voiceReplies, false),
+    voiceServiceId: text(
+      input.voiceServiceId,
+      '语音服务',
+      80,
+      input.voiceReplies ? 'local-default' : '',
+    ),
   };
 }
 export const providerView = ({
@@ -367,6 +374,14 @@ export class AgentManager {
     for (const view of saved) {
       const provider = this.providers.get(view.providerId);
       const settings = validateAgent(view, provider);
+      let voiceWarning = '';
+      try {
+        this.checkVoice(settings);
+      } catch {
+        settings.voiceReplies = false;
+        settings.voiceServiceId = '';
+        voiceWarning = '原语音服务不可用，已保留文字回复；请重新选择语音服务。';
+      }
       if (typeof view.id !== 'string' || !/^[a-zA-Z0-9-]{1,80}$/.test(view.id))
         throw new ManagementError('Agent 标识无效。', 500);
       const job: Job = {
@@ -407,6 +422,7 @@ export class AgentManager {
           '服务重启后原私聊会话已失效，请在控制台重新布置任务。';
       }
       this.jobs.set(view.id, job);
+      if (voiceWarning) job.view.logs.push(voiceWarning);
       if (
         ['idle', 'running', 'joining', 'failed'].includes(view.status) &&
         [...this.jobs.values()].filter(resident).length < 4
@@ -429,13 +445,30 @@ export class AgentManager {
       models: (provider: SavedProvider) =>
         listModels(provider, provider.apiKey),
     },
+    readonly voiceServices?: VoiceServiceStore,
   ) {}
+  private checkVoice(settings: AgentSettings) {
+    if (settings.voiceReplies && !settings.voiceServiceId)
+      throw new ManagementError('请先选择语音服务。');
+    if (settings.voiceServiceId)
+      this.voiceServices?.get(settings.voiceServiceId);
+  }
+  private bindVoice(job: Job) {
+    if (job.view.sessionId)
+      this.voiceServices?.bind(
+        job.view.sessionId,
+        job.view.voiceReplies ? job.view.voiceServiceId || 'local-default' : '',
+      );
+  }
   list() {
     return [...this.jobs.values()]
       .map(({ view, memory }) =>
         structuredClone({
           ...view,
           goal: memory.task?.goal ?? view.goal,
+          voiceServiceName: this.voiceServices
+            ?.list()
+            .find((s) => s.id === view.voiceServiceId)?.name,
           task: memory.task,
           usage: memory.usage,
           lastResponse: memory.lastResponse,
@@ -468,6 +501,7 @@ export class AgentManager {
       text(object(value).providerId, '服务商', 80),
     );
     const settings = validateAgent(value, provider);
+    this.checkVoice(settings);
     if ([...this.jobs.values()].filter(resident).length >= 4)
       throw new ManagementError(
         '最多同时在线 4 个受管理的 Agent（含待命），请先关闭一个。',
@@ -521,6 +555,7 @@ export class AgentManager {
       },
       provider,
     );
+    this.checkVoice(settings);
     if (!job.session && [...this.jobs.values()].filter(resident).length >= 4)
       throw new ManagementError('最多同时在线 4 个 Agent，请先关闭一个。', 409);
     clearTimeout(job.timer);
@@ -567,6 +602,7 @@ export class AgentManager {
       { ...job.view, goal: currentGoal, ...input },
       provider,
     );
+    this.checkVoice(settings);
     job.updating = true;
     try {
       const session = job.session;
@@ -603,6 +639,7 @@ export class AgentManager {
         job.attention.clear();
       }
       Object.assign(job.view, settings, { providerName: provider.name });
+      this.bindVoice(job);
       this.persist();
       await this.saving;
       return this.list().find((v) => v.id === job.view.id)!;
@@ -621,6 +658,7 @@ export class AgentManager {
     )
       throw new ManagementError('Agent 状态正在更新，请稍候。', 409);
     const enabled = boolean(object(value).enabled, false);
+    this.checkVoice({ ...job.view, voiceReplies: enabled });
     job.updating = true;
     try {
       if (job.session?.room) {
@@ -629,6 +667,7 @@ export class AgentManager {
           throw new ManagementError('语音开关未生效，请重试。', 409);
       }
       job.view.voiceReplies = enabled;
+      this.bindVoice(job);
       this.persist();
       await this.saving;
       return this.list().find((v) => v.id === job.view.id)!;
@@ -777,6 +816,7 @@ export class AgentManager {
           (value: { message: string }) => log(`语音：${value.message}`),
         );
         session.room.onLeave(() => {
+          this.voiceServices?.unbind(session.room.sessionId);
           if (job.session !== session) return;
           job.session = undefined;
           delete job.view.sessionId;
@@ -792,6 +832,7 @@ export class AgentManager {
       const voiceResult = await job.session.request('agent.voice', {
         enabled: !!job.view.voiceReplies,
       });
+      this.bindVoice(job);
       if (!voiceResult.ok) log('语音回复开关未生效，请检查服务器版本。');
       if (!job.abort.signal.aborted && run) {
         job.view.status = 'running';
@@ -870,6 +911,14 @@ export class AgentManager {
         409,
       );
     await this.providers.remove(id);
+  }
+  async removeVoiceService(id: string) {
+    if (!this.voiceServices) throw new ManagementError('语音服务未就绪。', 503);
+    await this.voiceServices.remove(id, () =>
+      [...this.jobs.values()].some(
+        (j) => j.updating || j.view.voiceServiceId === id,
+      ),
+    );
   }
   async close() {
     this.persist();

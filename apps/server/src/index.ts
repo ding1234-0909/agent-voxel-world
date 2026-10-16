@@ -12,6 +12,7 @@ import { installPresenceRoutes } from './routes/presence.routes';
 import { AgentManager, ProviderStore } from './agent/manager';
 import { installAgentRoutes } from './routes/agent.routes';
 import { checkStartupDatabase } from './startup';
+import { VoiceServiceStore } from './audio/voice-services';
 
 try {
   await checkStartupDatabase();
@@ -47,11 +48,18 @@ const server = new Server({
   transport: new WebSocketTransport({ server: http, maxPayload: 16384 }),
   greet: false,
 });
-server.define('world', WorldRoom);
+const voiceServices = new VoiceServiceStore();
+await voiceServices.load();
+server.define('world', WorldRoom, { voiceServices });
 const port = Number(process.env.PORT ?? 2567);
 const providers = new ProviderStore();
 await providers.load();
-const agents = new AgentManager(providers, `ws://127.0.0.1:${port}`);
+const agents = new AgentManager(
+  providers,
+  `ws://127.0.0.1:${port}`,
+  undefined,
+  voiceServices,
+);
 installAgentRoutes(app, agents);
 server.onBeforeShutdown(() => agents.close());
 await server.listen(port, '127.0.0.1');

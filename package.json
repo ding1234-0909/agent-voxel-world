@@ -24,6 +24,7 @@
     "test:agents": "pnpm --filter @voxel/server exec tsx test/integration/agent-management.ts",
     "test:chat": "pnpm --filter @voxel/server exec tsx test/integration/chat.ts",
     "test:agent:voice": "pnpm --filter @voxel/server exec tsx test/integration/agent-speech.ts",
+    "test:voice:services": "pnpm --filter @voxel/server exec tsx test/integration/voice-services.ts",
     "test:agent:tasks": "pnpm --filter @voxel/server exec tsx test/integration/agent-tasks.ts"
   },
   "devDependencies": {
