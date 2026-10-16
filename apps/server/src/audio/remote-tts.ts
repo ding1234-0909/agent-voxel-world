@@ -10,12 +10,39 @@ import type { SpeechSynthesizer } from './local-tts';
 const exec = promisify(execFile);
 async function boundedBody(response: Response, limit: number) {
   if (!response.ok) {
-    await response.body?.cancel();
-    throw new SpeechError(
-      `语音服务返回 HTTP ${response.status}，请检查地址、密钥、模型和音色。`,
-      502,
-    );
+    let detail = '';
+    try {
+      const data = JSON.parse(
+        (await readBody(response, 64 * 1024)).toString('utf8'),
+      );
+      // Use provider text only for classification: it may echo credentials or input.
+      detail = [data.code, data.message, data.error?.code, data.error?.message]
+        .filter((v) => typeof v === 'string')
+        .join(' ')
+        .toLowerCase();
+    } catch {
+      // HTML, malformed and oversized error bodies still receive a useful fallback.
+    }
+    const hint =
+      response.status === 401 || /invalidapikey|invalid_api_key/.test(detail)
+        ? 'API Key 无效或已过期，请检查密钥与接口地域。'
+        : response.status === 403
+          ? '无权调用此服务，请检查模型权限与密钥地域。'
+          : response.status === 429
+            ? '调用额度或频率受限，请检查配额后稍后重试。'
+            : /voice|speaker|音色/.test(detail)
+              ? '音色不可用，请检查音色 ID 是否属于当前模型。'
+              : /model|模型/.test(detail)
+                ? '模型不可用或与接口不匹配，请检查模型 ID、地域和调用权限。'
+                : response.status === 400
+                  ? '请求参数不被接受，请检查模型、音色与接口是否匹配。'
+                  : '服务暂不可用，请检查接口地址或稍后重试。';
+    throw new SpeechError(`语音服务返回 HTTP ${response.status}：${hint}`, 502);
   }
+  return readBody(response, limit);
+}
+
+async function readBody(response: Response, limit: number) {
   const chunks: Uint8Array[] = [];
   let size = 0;
   if (!response.body) throw new SpeechError('语音服务返回空响应。', 502);
@@ -92,10 +119,13 @@ export class RemoteTts implements SpeechSynthesizer {
     signal.throwIfAborted();
     const c = this.config;
     const bailian = c.type === 'bailian';
+    const audioTts = bailian && /^qwen-audio-[\d.]+-tts-/.test(c.model);
     const response = await this.request(
       `${c.baseUrl}${
         bailian
-          ? '/services/aigc/multimodal-generation/generation'
+          ? audioTts
+            ? '/services/audio/tts/SpeechSynthesizer'
+            : '/services/aigc/multimodal-generation/generation'
           : '/audio/speech'
       }`,
       {
@@ -110,7 +140,9 @@ export class RemoteTts implements SpeechSynthesizer {
           bailian
             ? {
                 model: c.model,
-                input: { text, voice: c.voice, language_type: 'Auto' },
+                input: audioTts
+                  ? { text, voice: c.voice, format: 'wav', sample_rate: 16000 }
+                  : { text, voice: c.voice, language_type: 'Auto' },
               }
             : {
                 model: c.model,
@@ -127,8 +159,16 @@ export class RemoteTts implements SpeechSynthesizer {
       bailian ? 64 * 1024 : 10 * 1024 * 1024,
     );
     if (bailian) {
-      const data = JSON.parse(bytes.toString('utf8'));
-      const url = new URL(data?.output?.audio?.url);
+      let url: URL;
+      try {
+        const data = JSON.parse(bytes.toString('utf8'));
+        url = new URL(data?.output?.audio?.url);
+      } catch {
+        throw new SpeechError(
+          '百炼未返回有效的音频地址，请检查模型是否支持非流式语音合成。',
+          502,
+        );
+      }
       // Provider output must not become an arbitrary authenticated server-side fetch.
       if (
         !['http:', 'https:'].includes(url.protocol) ||

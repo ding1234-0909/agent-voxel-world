@@ -262,7 +262,9 @@ export function VoiceServices({
             )}
             {draft.type === 'bailian' && (
               <p className="agent-hint">
-                使用百炼 Qwen-TTS 语音合成接口；音色须与所选模型匹配。
+                支持 Qwen-TTS 与 Qwen-Audio-TTS，按模型自动选择合成接口。
+                qwen3-tts-flash 可搭配 Cherry；qwen-audio-3.1-tts-flash 可搭配
+                longanhuan_v3.1。音色须与模型及地域匹配。
               </p>
             )}
             <div className="voice-service-actions">
