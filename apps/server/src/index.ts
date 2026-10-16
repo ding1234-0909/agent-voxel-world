@@ -11,6 +11,15 @@ import { installSpeechRoutes } from './routes/speech.routes';
 import { installPresenceRoutes } from './routes/presence.routes';
 import { AgentManager, ProviderStore } from './agent/manager';
 import { installAgentRoutes } from './routes/agent.routes';
+import { checkStartupDatabase } from './startup';
+
+try {
+  await checkStartupDatabase();
+} catch (error) {
+  console.error((error as Error).message);
+  process.exit(1);
+}
+
 const app = express();
 app.use((req, res, next) => {
   if (
