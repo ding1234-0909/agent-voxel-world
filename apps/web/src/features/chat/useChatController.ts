@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import type { Player } from '@voxel/shared';
 import type { Connection } from '../../network/connection';
-import { LocalRecorder } from '../../audio/local-recorder';
+import { LiveRecorder } from '../../audio/live-recorder';
 import { ClipRecorder } from '../../audio/clip-recorder';
 import { mentionQuery, consumeMention } from './chat-mentions';
 import { chatApi } from './api';
@@ -36,13 +36,16 @@ export function useChatController(connection: Connection) {
       | 'recording'
       | 'sending'
     >('idle');
+  const [partial, setPartial] = useState('');
+  const [overflow, setOverflow] = useState('');
+  const dictated = useRef('');
   const [clipDuration, setClipDuration] = useState(0);
   const [clip, setClip] = useState<Blob>(),
     [preview, setPreview] = useState('');
   const input = useRef<HTMLInputElement>(null),
     list = useRef<HTMLDivElement>(null),
     upload = useRef<AbortController | undefined>(undefined);
-  const [dictation] = useState(() => new LocalRecorder()),
+  const [dictation] = useState(() => new LiveRecorder()),
     [recorder] = useState(() => new ClipRecorder());
   const connected = connection.status === 'connected',
     busy = mode !== 'idle';
@@ -89,6 +92,7 @@ export function useChatController(connection: Connection) {
     upload.current?.abort();
     connection.chatRecording = false;
     setMode('idle');
+    setPartial('');
     setStatus('');
   };
   useEffect(() => {
@@ -159,6 +163,11 @@ export function useChatController(connection: Connection) {
     }
   };
   const record = (kind: 'text' | 'audio') => {
+    if (kind === 'text' && overflow) {
+      setError('请先处理下方保留的已确认句子，再继续听写。');
+      return;
+    }
+    dictated.current = text;
     if (connection.voiceLabRecording) {
       setError('请先结束语音设置中的录音。');
       return;
@@ -180,13 +189,28 @@ export function useChatController(connection: Connection) {
           setMode(state === 'listening' ? 'dictating' : 'transcribing');
           setStatus(
             state === 'listening'
-              ? '听写中，结束后可编辑再发送。'
+              ? '听写中，停顿后确认整句；结束后可编辑再发送。'
               : '正在服务器识别…',
           );
         },
-        onText: (value) => {
+        onPartial: setPartial,
+        onStatus: setStatus,
+        onFinal: (value) => {
+          const next = (dictated.current + ' ' + value).trim();
+          if (next.length > 240) {
+            dictation.cancel();
+            setPartial('');
+            setOverflow(value);
+            fail('输入框最多 240 字，听写已停止。本句保留在下方，请分开发送。');
+            return;
+          }
+          dictated.current = next;
+          setText(next);
+          setStatus('整句已确认，可以继续讲话；结束后确认发送。');
+        },
+        onEnd: () => {
           connection.chatRecording = false;
-          setText((t) => (t + ' ' + value).trim().slice(0, 240));
+          setPartial('');
           setMode('idle');
           setStatus('已转为文字，请确认后发送。');
         },
@@ -293,6 +317,9 @@ export function useChatController(connection: Connection) {
     setError,
     mode,
     setMode,
+    partial,
+    overflow,
+    setOverflow,
     clipDuration,
     clip,
     setClip,

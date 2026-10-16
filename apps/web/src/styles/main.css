@@ -810,6 +810,18 @@ footer {
   line-height: 1.6;
   margin: 12px 0;
 }
+.speech-interim {
+  padding: 10px 12px;
+  border-left: 3px solid #91a58d;
+  background: #edf1e7;
+  color: #627767;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.speech-interim p {
+  margin: 6px 0 0;
+}
 .voice-preview {
   border-top: 1px solid #d8e1d2;
   margin-top: 24px;

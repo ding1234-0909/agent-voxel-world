@@ -8,6 +8,15 @@ class PCM16Capture extends AudioWorkletProcessor {
     this.bytes = new ArrayBuffer(3200);
     this.view = new DataView(this.bytes);
     this.offset = 0;
+    this.port.onmessage = (event) => {
+      if (event.data !== 'flush') return;
+      if (this.offset) {
+        const tail = this.bytes.slice(0, this.offset);
+        this.port.postMessage(tail, [tail]);
+        this.offset = 0;
+      }
+      this.port.postMessage({ flushed: true });
+    };
   }
   process(inputs) {
     const channel = inputs[0]?.[0];

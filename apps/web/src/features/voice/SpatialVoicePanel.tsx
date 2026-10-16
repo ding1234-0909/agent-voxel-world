@@ -17,6 +17,7 @@ export function SpatialVoicePanel({ connection }: { connection: Connection }) {
   const [transcript, setTranscript] = useState<TranscriptionState>({
     status: '麦克风开启时自动转写',
     text: '',
+    partial: '',
     error: '',
   });
   const engine = useRef<SpatialVoice | null>(null);
@@ -119,7 +120,7 @@ export function SpatialVoicePanel({ connection }: { connection: Connection }) {
         </button>
       </div>
       <small>18 格内随距离、朝向变化 · {state.connected} 个语音连接</small>
-      <small>开启麦克风会同步服务器转写，附近 Agent 自动接收。</small>
+      <small>说话时显示临时字幕，整句确认后附近 Agent 才会收到。</small>
       <small>开启收听可听见附近 Agent 的语音回复；私聊仅接收者可听。</small>
       {state.agentSpeaking && (
         <p className="spatial-caption" role="status">
@@ -127,6 +128,11 @@ export function SpatialVoicePanel({ connection }: { connection: Connection }) {
         </p>
       )}
       <small role="status">{transcript.status}</small>
+      {transcript.partial && (
+        <p className="speech-interim" role="status">
+          临时字幕 · {transcript.partial}
+        </p>
+      )}
       {transcript.text && <p className="spatial-caption">{transcript.text}</p>}
       {transcript.error && (
         <p role="alert" className="chat-error">

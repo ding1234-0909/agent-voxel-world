@@ -193,6 +193,34 @@ try {
   const ticketResponse = await startSpeech();
   assert.equal(ticketResponse.status, 200);
   const ticket = (await ticketResponse.json()) as { id: string };
+  const previewResponse = await fetch(
+    `${url}/chat/spatial/${ticket.id}/preview`,
+    {
+      method: 'POST',
+      headers: { ...headers(a), 'Content-Type': 'audio/wav' },
+      body: 'preview speech',
+    },
+  );
+  assert.equal(previewResponse.status, 200);
+  assert.equal(
+    ((await previewResponse.json()) as { text: string }).text,
+    'fixture transcript',
+  );
+  await delay(100);
+  assert(
+    !ai.events.some((e) => (e.data as any).scope === 'nearby'),
+    'Preview must never reach the Agent',
+  );
+  assert(!out.events.some((e) => (e.data as any).scope === 'nearby'));
+  const forgedPreview = await fetch(
+    `${url}/chat/spatial/${ticket.id}/preview`,
+    {
+      method: 'POST',
+      headers: { ...headers(out), 'Content-Type': 'audio/wav' },
+      body: 'forged preview',
+    },
+  );
+  assert.equal(forgedPreview.status, 409);
   const captionResponse = await fetch(`${url}/chat/spatial/${ticket.id}`, {
     method: 'POST',
     headers: { ...headers(a), 'Content-Type': 'audio/webm' },

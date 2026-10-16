@@ -28,6 +28,9 @@ export function ChatPanel({ connection }: { connection: Connection }) {
     setError,
     mode,
     setMode,
+    partial,
+    overflow,
+    setOverflow,
     clipDuration,
     clip,
     setClip,
@@ -281,6 +284,30 @@ export function ChatPanel({ connection }: { connection: Connection }) {
             ? '所有人可见，已选对象会被提醒；Agent 可被唤醒。'
             : '所有人可见，输入 @ 或点击选人来提醒对方。'}
       </small>
+      {partial && (
+        <p className="speech-interim" role="status">
+          临时字幕 · {partial}
+        </p>
+      )}
+      {overflow && (
+        <div className="speech-interim">
+          <label>
+            待发送的已确认句子
+            <textarea readOnly value={overflow} rows={2} />
+          </label>
+          <button
+            disabled={busy || !!text.trim()}
+            onClick={() => {
+              setText(overflow);
+              setOverflow('');
+              setError('');
+              setStatus('已填入，请确认后发送。');
+            }}
+          >
+            填入空白输入框
+          </button>
+        </div>
+      )}
       {status && (
         <p role="status" className="chat-help">
           {status}

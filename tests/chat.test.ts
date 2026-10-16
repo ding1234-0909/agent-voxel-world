@@ -184,6 +184,22 @@ describe('nearby speech delivery', () => {
     expect(emit).toHaveBeenCalledTimes(1);
     expect(() => chat.claimSpatial('s', id)).toThrow();
   });
+  it('authorizes previews without consuming tickets or waking listeners', () => {
+    const { chat, emit } = setup();
+    const id = chat.beginSpatial('s');
+    expect(chat.previewSpatial('s', id).aborted).toBe(false);
+    expect(chat.previewSpatial('s', id).aborted).toBe(false);
+    expect(() => chat.previewSpatial('ai', id)).toThrow();
+    expect(() => chat.publishSpatial('s', id, 'unconfirmed')).toThrow();
+    expect(emit).not.toHaveBeenCalled();
+    chat.claimSpatial('s', id);
+    expect(() => chat.previewSpatial('s', id)).toThrow();
+    chat.publishSpatial('s', id, 'confirmed');
+    expect(emit).toHaveBeenCalledExactlyOnceWith(
+      's',
+      expect.objectContaining({ text: 'confirmed', recipients: ['ai'] }),
+    );
+  });
   it('uses facing as well as distance and removes departed listeners before delivery', () => {
     const { chat, near, speaker } = setup();
     near.z = -14;

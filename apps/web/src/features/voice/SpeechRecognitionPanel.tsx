@@ -3,6 +3,7 @@ import {
   LocalRecorder,
   type SpeechCapabilities,
 } from '../../audio/local-recorder';
+import { LiveRecorder } from '../../audio/live-recorder';
 import type { Connection } from '../../network/connection';
 import { voiceApi } from './api';
 
@@ -14,6 +15,8 @@ export function SpeechRecognitionPanel({
   connection: Connection;
 }) {
   const [recorder] = useState(() => new LocalRecorder());
+  const [live] = useState(() => new LiveRecorder());
+  const [partial, setPartial] = useState('');
   const [capabilities, setCapabilities] = useState<SpeechCapabilities>();
   const [checking, setChecking] = useState(false);
   const [checkError, setCheckError] = useState('');
@@ -30,6 +33,8 @@ export function SpeechRecognitionPanel({
   };
   const stop = () => {
     recorder.cancel();
+    live.cancel();
+    setPartial('');
     release();
     setState('idle');
     setStatus('已停止识别。');
@@ -39,9 +44,11 @@ export function SpeechRecognitionPanel({
     setStatus('');
     return () => {
       recorder.cancel();
+      live.cancel();
+      setPartial('');
       release();
     };
-  }, [active, connection, recorder]);
+  }, [active, connection, recorder, live]);
   useEffect(() => {
     if (!active) return;
     const abort = new AbortController();
@@ -106,14 +113,27 @@ export function SpeechRecognitionPanel({
       },
     };
     if (file) void recorder.transcribeFile(file, language, callbacks);
-    else void recorder.start(language, callbacks);
+    else
+      void live.start(language, {
+        onState: callbacks.onState,
+        onStatus: setStatus,
+        onPartial: setPartial,
+        onFinal: (value) =>
+          setText((previous) => (previous + '\n' + value).trim().slice(-4000)),
+        onError: callbacks.onError,
+        onEnd: () => {
+          release();
+          setState('idle');
+          setStatus('录音已结束，整句已确认。结果仅显示在这里。');
+        },
+      });
   };
   return (
     <section aria-labelledby="asr-title">
       <div className="console-section-heading">
         <h3 id="asr-title">语音识别（ASR）</h3>
         <p>
-          将说话内容转为文字，检查识别服务并试用转写效果。当前试用在录音结束后返回结果。
+          边说边查看临时字幕，停顿后自动确认整句。临时字幕会随后续语音修正。
         </p>
       </div>
       <div className="voice-services-layout">
@@ -172,13 +192,13 @@ export function SpeechRecognitionPanel({
           <div className="voice-service-actions">
             <button
               type="button"
-              disabled={!ready || busy || !recorder.canRecord}
+              disabled={!ready || busy || !live.canRecord}
               onClick={() => start()}
             >
               开始录音
             </button>
             {state === 'listening' && (
-              <button type="button" onClick={() => recorder.finish()}>
+              <button type="button" onClick={() => void live.finish()}>
                 结束录音
               </button>
             )}
@@ -188,7 +208,7 @@ export function SpeechRecognitionPanel({
               </button>
             )}
           </div>
-          {!recorder.canRecord && (
+          {!live.canRecord && (
             <p className="agent-hint">
               当前浏览器无法录音，可选择音频文件进行识别。
             </p>
@@ -207,7 +227,8 @@ export function SpeechRecognitionPanel({
             />
           </label>
           <small className="asr-help">
-            录音或文件会发送到项目服务器识别。试用结果不会发送到聊天或触发
+            录音或文件会发送到项目服务器识别。每次连续录音最长 5
+            分钟；结束录音会确认最后一句，取消会丢弃未确认内容。试用结果不会发送到聊天或触发
             Agent；切换页面或关闭控制台会停止录音和识别。
           </small>
           {status && <p role="status">{status}</p>}
@@ -216,13 +237,22 @@ export function SpeechRecognitionPanel({
               {error}
             </p>
           )}
+          <div className="speech-interim" role="status" aria-live="polite">
+            <strong>临时字幕 · 未确认</strong>
+            <p>
+              {partial ||
+                (state === 'listening'
+                  ? '正在听取讲话…'
+                  : '说话时在这里显示，停顿后确认')}
+            </p>
+          </div>
           <label>
-            识别结果
+            已确认文字
             <textarea
               rows={4}
               readOnly
               value={text}
-              placeholder="转写完成后，文字会显示在这里"
+              placeholder="每句确认后，文字会追加到这里"
             />
           </label>
         </div>

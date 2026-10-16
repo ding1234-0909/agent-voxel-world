@@ -6,6 +6,7 @@ import {
 } from '../audio/local-speech';
 import { createVoiceProvider } from '../audio/voice';
 import { LocalTts } from '../audio/local-tts';
+import { scheduleSpeech } from '../audio/speech-scheduler';
 export function installSpeechRoutes(app: Express, speech = new LocalSpeech()) {
   const origin = process.env.WEB_ORIGIN ?? 'http://127.0.0.1:5173';
   app.use('/voice', (req, res, next) => {
@@ -49,11 +50,12 @@ export function installSpeechRoutes(app: Express, speech = new LocalSpeech()) {
       };
       res.on('close', cancel);
       try {
-        const text = await speech.transcribe(
+        const text = await scheduleSpeech(speech).transcribe(
           Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0),
           req.headers['content-type'] ?? '',
           String(req.query.language ?? 'zh'),
           controller.signal,
+          req.query.partial === '1',
         );
         if (!controller.signal.aborted) res.json({ text });
       } catch (error) {

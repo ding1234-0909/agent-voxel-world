@@ -2,6 +2,7 @@ import express, { type Express, type ErrorRequestHandler } from 'express';
 import { ChatError, type WorldChat } from '../chat/chat';
 import { LocalSpeech, SpeechError } from '../audio/local-speech';
 import type { AgentSpeech } from '../agent/speech';
+import { scheduleSpeech } from '../audio/speech-scheduler';
 export function installChatRoutes(
   app: Express,
   getChat: () => WorldChat | undefined,
@@ -64,7 +65,7 @@ export function installChatRoutes(
         );
         let text = '';
         try {
-          text = await speech.transcribe(
+          text = await scheduleSpeech(speech).transcribe(
             normalized.bytes,
             'audio/wav',
             req.query.language === 'en' ? 'en' : 'zh',
@@ -113,12 +114,13 @@ export function installChatRoutes(
     res.sendStatus(204);
   });
   app.post(
-    '/chat/spatial/:id',
+    ['/chat/spatial/:id', '/chat/spatial/:id/preview'],
     express.raw({ type: () => true, limit: '1mb' }),
     async (req, res, next) => {
       const chat = res.locals.chat as WorldChat,
         actor = res.locals.actor as string,
         id = String(req.params.id);
+      const partial = req.path.endsWith('/preview');
       const abort = new AbortController();
       const cancel = () => {
         if (!res.writableEnded) abort.abort();
@@ -127,23 +129,29 @@ export function installChatRoutes(
       try {
         const signal = AbortSignal.any([
           abort.signal,
-          chat.claimSpatial(actor, id),
+          partial
+            ? chat.previewSpatial(actor, id)
+            : chat.claimSpatial(actor, id),
         ]);
-        const text = await speech.transcribe(
+        const text = await scheduleSpeech(speech).transcribe(
           Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0),
           req.headers['content-type'] ?? '',
           'zh',
           signal,
+          partial,
         );
         signal.throwIfAborted();
         chat.authenticate(
           (req.headers.authorization ?? '').replace(/^Bearer /, ''),
         );
-        res.json(chat.publishSpatial(actor, id, text));
+        if (partial) {
+          chat.previewSpatial(actor, id);
+          res.json({ text });
+        } else res.json(chat.publishSpatial(actor, id, text));
       } catch (e) {
         if (!abort.signal.aborted) next(e);
       } finally {
-        chat.endSpatial(actor, id);
+        if (!partial) chat.endSpatial(actor, id);
         res.off('close', cancel);
       }
     },

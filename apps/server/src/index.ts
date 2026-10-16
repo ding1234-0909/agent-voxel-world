@@ -13,6 +13,7 @@ import { AgentManager, ProviderStore } from './agent/manager';
 import { installAgentRoutes } from './routes/agent.routes';
 import { checkStartupDatabase } from './startup';
 import { VoiceServiceStore } from './audio/voice-services';
+import { LocalSpeech } from './audio/local-speech';
 
 try {
   await checkStartupDatabase();
@@ -29,7 +30,8 @@ app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', req.headers.origin);
   next();
 });
-installSpeechRoutes(app);
+const speech = new LocalSpeech();
+installSpeechRoutes(app, speech);
 app.get('/health', (_req, res) =>
   res.json({
     ok: true,
@@ -70,7 +72,7 @@ installChatRoutes(
   app,
   () =>
     (matchMaker.getLocalRoomById(world.roomId) as WorldRoom | undefined)?.chat,
-  undefined,
+  speech,
   () =>
     (matchMaker.getLocalRoomById(world.roomId) as WorldRoom | undefined)
       ?.agentSpeech,

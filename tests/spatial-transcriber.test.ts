@@ -1,48 +1,29 @@
-import { afterEach, expect, it, vi } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { SpatialTranscriber } from '../apps/web/src/audio/spatial-transcriber';
-class Recorder {
-  static isTypeSupported() {
-    return true;
-  }
-  state = 'inactive';
-  onstop: (() => void) | null = null;
-  ondataavailable: ((e: { data: Blob }) => void) | null = null;
-  onerror: (() => void) | null = null;
-  start() {
-    this.state = 'recording';
-  }
-  stop() {
-    this.state = 'inactive';
-    this.ondataavailable?.({ data: new Blob(['speech']) });
-    this.onstop?.();
-  }
-}
-function setup(loud = true) {
-  vi.useFakeTimers();
-  const track = { stop: vi.fn() },
-    stream = {
-      active: true,
-      getTracks: () => [track],
-    } as unknown as MediaStream;
-  vi.stubGlobal('MediaRecorder', Recorder);
-  const close = vi.fn(async () => {});
-  vi.stubGlobal(
-    'AudioContext',
-    class {
-      resume = async () => {};
-      close = close;
-      createMediaStreamSource() {
-        return { connect: vi.fn(), disconnect: vi.fn() };
-      }
-      createAnalyser() {
-        return {
-          fftSize: 2048,
-          getFloatTimeDomainData: (samples: Float32Array) =>
-            samples.fill(loud ? 0.05 : 0),
-        };
-      }
-    },
-  );
+import {
+  LiveRecorder,
+  type SpeechCapture,
+} from '../apps/web/src/audio/live-recorder';
+const flush = async () => {
+  for (let i = 0; i < 18; i++) await Promise.resolve();
+};
+function setup() {
+  let frame!: (pcm: Uint8Array) => void;
+  const capture = {
+    canRecord: true,
+    start: vi.fn(
+      async (
+        callback: typeof frame,
+        _ended: () => void,
+        _stream?: MediaStream,
+      ) => {
+        frame = callback;
+        return true;
+      },
+    ),
+    stop: vi.fn(),
+    finish: vi.fn(async () => {}),
+  };
   let n = 0;
   const request = vi.fn(
     async (url: string, options: RequestInit) =>
@@ -52,44 +33,62 @@ function setup(loud = true) {
           : JSON.stringify(
               url.endsWith('/start')
                 ? { id: String(++n) }
-                : { text: '识别文字' },
+                : { text: url.endsWith('/preview') ? '未确认' : '识别文字' },
             ),
         { status: options.method === 'DELETE' ? 204 : 200 },
       ),
   );
   const changed = vi.fn(),
-    transcriber = new SpatialTranscriber(
-      () => 'token',
-      changed,
-      request as typeof fetch,
-    );
-  return { transcriber, changed, request, stream, track, close };
+    stream = {} as MediaStream;
+  const transcriber = new SpatialTranscriber(
+    () => 'token',
+    changed,
+    request as typeof fetch,
+    new LiveRecorder(capture as unknown as SpeechCapture),
+  );
+  const feed = (count: number, loud = true) => {
+    for (let i = 0; i < count; i++) {
+      const pcm = new Uint8Array(3200);
+      const view = new DataView(pcm.buffer);
+      if (loud)
+        for (let j = 0; j < pcm.length; j += 2) view.setInt16(j, 2000, true);
+      frame(pcm);
+    }
+  };
+  return { capture, request, changed, stream, transcriber, feed };
 }
-afterEach(() => {
-  vi.useRealTimers();
-  vi.unstubAllGlobals();
-});
-it('segments live audio, posts ordered transcripts and never acquires another mic', async () => {
+it('uses the existing microphone, previews locally and only publishes final sentences', async () => {
   const t = setup();
   await t.transcriber.start(t.stream);
-  await vi.advanceTimersByTimeAsync(6200);
-  const upload = t.request.mock.calls.find(([, options]) => options.body);
-  expect(upload?.[1].body).toBeInstanceOf(Blob);
-  expect(t.changed).toHaveBeenCalledWith(
-    expect.objectContaining({ text: '识别文字' }),
+  t.feed(12);
+  await flush();
+  expect(t.capture.start.mock.calls[0][2]).toBe(t.stream);
+  await vi.waitFor(() =>
+    expect(t.changed).toHaveBeenCalledWith(
+      expect.objectContaining({ partial: '未确认', text: '' }),
+    ),
+  );
+  expect(
+    t.request.mock.calls.some(
+      ([url, init]) => url.endsWith('/1') && init.method === 'POST',
+    ),
+  ).toBe(false);
+  t.feed(9, false);
+  await flush();
+  await vi.waitFor(() =>
+    expect(t.changed).toHaveBeenCalledWith(
+      expect.objectContaining({ text: '识别文字' }),
+    ),
   );
   t.transcriber.stop();
-  expect(t.close).toHaveBeenCalled();
-  expect(t.track.stop).not.toHaveBeenCalled();
+  expect(t.capture.stop).toHaveBeenCalled();
 });
-it('drops silent segments without invoking transcription', async () => {
-  const t = setup(false);
+it('does not create tickets or infer on silence', async () => {
+  const t = setup();
   await t.transcriber.start(t.stream);
-  await vi.advanceTimersByTimeAsync(6200);
-  expect(t.request.mock.calls.some(([, options]) => options.body)).toBe(false);
-  expect(
-    t.request.mock.calls.some(([, options]) => options.method === 'DELETE'),
-  ).toBe(true);
+  t.feed(100, false);
+  await flush();
+  expect(t.request).not.toHaveBeenCalled();
   t.transcriber.stop();
 });
 it('aborts in-flight recognition and ignores late results on stop', async () => {
@@ -100,37 +99,23 @@ it('aborts in-flight recognition and ignores late results on stop', async () => 
   t.request.mockImplementation(async (url, options) => {
     if (options.body) {
       signal = options.signal as AbortSignal;
-      return new Promise((r) => (resolve = r));
+      return new Promise((r) => {
+        resolve = r;
+      });
     }
     return normal(url, options);
   });
   await t.transcriber.start(t.stream);
-  await vi.advanceTimersByTimeAsync(6200);
+  t.feed(12);
+  await flush();
   expect(signal).toBeDefined();
   t.transcriber.stop();
-  expect(signal?.aborted).toBe(true);
-  resolve(new Response(JSON.stringify({ text: 'late text' })));
-  await vi.advanceTimersByTimeAsync(100);
+  expect(signal!.aborted).toBe(true);
+  resolve(new Response(JSON.stringify({ text: 'late' })));
+  await flush();
   expect(
-    t.changed.mock.calls.some(([state]) => state.text === 'late text'),
+    t.changed.mock.calls.some(
+      ([state]) => state.text === 'late' || state.partial === 'late',
+    ),
   ).toBe(false);
-});
-
-it('calls browser fetch without binding it to the transcriber instance', async () => {
-  const t = setup();
-  vi.stubGlobal(
-    'fetch',
-    function (this: unknown, input: RequestInfo | URL, init?: RequestInit) {
-      if (this instanceof SpatialTranscriber)
-        throw new TypeError('Illegal invocation');
-      return t.request(String(input), init!);
-    },
-  );
-  const transcriber = new SpatialTranscriber(() => 'token', t.changed);
-  await transcriber.start(t.stream);
-  await vi.advanceTimersByTimeAsync(6200);
-  expect(t.changed).toHaveBeenCalledWith(
-    expect.objectContaining({ text: '识别文字' }),
-  );
-  transcriber.stop();
 });

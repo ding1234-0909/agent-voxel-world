@@ -185,12 +185,17 @@ export class WorldChat {
     return id;
   }
   claimSpatial(actor: string, id: string) {
+    const signal = this.previewSpatial(actor, id);
+    this.speechTickets.get(id)!.claimed = true;
+    return signal;
+  }
+  /** Authorize a preview without consuming the ticket or emitting a chat event. */
+  previewSpatial(actor: string, id: string) {
     this.pruneSpeech();
     this.speaker(actor);
     const ticket = this.speechTickets.get(id);
     if (!ticket || ticket.actor !== actor || ticket.claimed)
       throw new ChatError('该语音片段已过期或处理过。', 409);
-    ticket.claimed = true;
     return ticket.controller.signal;
   }
   publishSpatial(actor: string, id: string, text: string) {
