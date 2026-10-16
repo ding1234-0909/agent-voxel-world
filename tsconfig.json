@@ -13,5 +13,6 @@
     "types": ["node"],
     "useDefineForClassFields": false
   },
-  "include": ["apps", "packages", "tests", "scripts"]
+  "include": ["apps", "packages", "tests", "scripts"],
+  "exclude": ["**/node_modules", "**/dist", "**/output"]
 }

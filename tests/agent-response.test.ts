@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readAgentResponse } from '../apps/web/src/agent-response';
+import { readAgentResponse } from '../apps/web/src/features/console/agent-response';
 
 describe('Agent API responses', () => {
   it('explains an unavailable endpoint instead of exposing HTML parsing errors', async () => {

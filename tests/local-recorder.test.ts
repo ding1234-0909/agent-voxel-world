@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { LocalRecorder } from '../apps/web/src/local-recorder';
+import { LocalRecorder } from '../apps/web/src/audio/local-recorder';
 class Recorder {
   static latest: Recorder;
   static isTypeSupported() {

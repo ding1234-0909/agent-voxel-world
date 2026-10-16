@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { AgentSpeechPlayback } from '../apps/web/src/agent-speech-playback';
+import { AgentSpeechPlayback } from '../apps/web/src/audio/agent-speech-playback';
 import type { AgentSpeechEvent } from '../packages/shared/src';
 const event = (id = 'clip'): AgentSpeechEvent => ({
   id,

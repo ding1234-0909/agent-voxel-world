@@ -1,4 +1,5 @@
-import type { RealtimeEvent } from '../../../packages/shared/src/realtime';
+import { serverHttpUrl, serverSocketUrl } from './endpoints';
+import type { RealtimeEvent } from '../../../../packages/shared/src/realtime';
 import { Client, type Room } from 'colyseus.js';
 import {
   key,
@@ -88,9 +89,7 @@ export class Connection {
     this.request = request;
     this.status = 'connecting';
     this.onChange();
-    const client = new Client(
-      import.meta.env.VITE_SERVER_URL ?? 'ws://127.0.0.1:2567',
-    );
+    const client = new Client(serverSocketUrl());
     try {
       const token = sessionStorage.getItem('voxel-reconnect');
       let room: Room;
@@ -99,9 +98,7 @@ export class Connection {
         room = await client.reconnect(token);
       } catch {
         if (!current()) return;
-        const endpoint = (
-          import.meta.env.VITE_SERVER_URL ?? 'ws://127.0.0.1:2567'
-        ).replace(/^ws/, 'http');
+        const endpoint = serverHttpUrl();
         const info = await fetch(`${endpoint}/world`, {
           signal: request.signal,
         }).then((r) => {

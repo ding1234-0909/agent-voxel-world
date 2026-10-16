@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { REACH, type Block, type Material } from '@voxel/shared';
-import { Connection } from './connection';
+import { Connection } from '../network/connection';
 import { VoxelAvatar } from './avatar';
 const colors = {
   grass: 0x6b9c52,

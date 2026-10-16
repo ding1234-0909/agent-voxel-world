@@ -1,12 +1,12 @@
+import { voiceApi } from './api';
 import { useEffect, useRef, useState } from 'react';
-import type { Connection } from './connection';
-import { BrowserSpeech } from './browser-speech';
+import type { Connection } from '../../network/connection';
+import { BrowserSpeech } from '../../audio/browser-speech';
 import {
   LocalRecorder,
-  voiceApi,
   type SpeechCapabilities,
   type RecordingCallbacks,
-} from './local-recorder';
+} from '../../audio/local-recorder';
 type VoiceEvent = {
   requestId?: string;
   state: string;
@@ -35,14 +35,9 @@ export function VoicePanel({
   useEffect(() => {
     const controller = new AbortController();
     setCapabilityError('');
-    void fetch(`${voiceApi()}/voice/capabilities`, {
-      signal: controller.signal,
-    })
-      .then(async (response) => {
-        if (!response.ok) throw Error('capabilities');
-        const value = await response.json();
-        if (typeof value.local?.available !== 'boolean')
-          throw Error('capabilities');
+    void voiceApi
+      .capabilities(controller.signal)
+      .then((value) => {
         if (!controller.signal.aborted) setCapabilities(value);
       })
       .catch(() => {

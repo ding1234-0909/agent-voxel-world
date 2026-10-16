@@ -5,7 +5,7 @@ import {
   PCMPlayer,
   PCMCapture,
   pcmFloats,
-} from '../apps/web/src/realtime-audio';
+} from '../apps/web/src/audio/realtime-audio';
 describe('realtime browser audio', () => {
   afterEach(() => vi.unstubAllGlobals());
   it('stops a stream granted after cancellation without creating audio processing', async () => {
@@ -84,7 +84,7 @@ describe('realtime browser audio', () => {
       let Constructor: any;
       runInNewContext(
         readFileSync(
-          new URL('../apps/web/src/pcm-worklet.js', import.meta.url),
+          new URL('../apps/web/src/audio/pcm-worklet.js', import.meta.url),
           'utf8',
         ),
         {

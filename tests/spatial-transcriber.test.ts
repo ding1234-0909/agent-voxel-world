@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { SpatialTranscriber } from '../apps/web/src/spatial-transcriber';
+import { SpatialTranscriber } from '../apps/web/src/audio/spatial-transcriber';
 class Recorder {
   static isTypeSupported() {
     return true;

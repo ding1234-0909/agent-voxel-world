@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { Connection } from './connection';
-import { PresenceSubscription } from './world-presence';
+import type { Connection } from '../../network/connection';
+import { PresenceSubscription } from '../../network/world-presence';
 
 export function WorldPanel({
   connection,

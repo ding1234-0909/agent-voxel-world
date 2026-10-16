@@ -193,3 +193,13 @@
 - `pnpm test:agents`、`pnpm test:chat`、`pnpm test:agent:voice`、`pnpm test:agent:tasks`、`pnpm test:agent:deepseek` 以及 `pnpm --filter @voxel/server exec tsx test/integration/realtime.ts` 全部通过。测试使用独立临时世界、固定模型响应及模拟音频，不调用云端模型。
 - 迁移后的离线沙盒启动成功，`GET /world` 返回房间 ID，随后正常关闭本次创建的进程。逐文件比对确认服务端 25 个文件除相对路径和格式外逻辑一致；基于文件位置解析的 `.env`、Agent 配置与 Whisper 模型路径仍指向原位置，生产模块没有引用服务端测试目录。
 - 本轮没有重启既有开发服务，没有运行会修改既有世界的根目录 `pnpm test:integration`；没有进行新的浏览器或真实模型/语音验收。
+
+## 2026-10-16 前端目录、请求边界与组件拆分
+
+- 前端按 `features`、`graphics`、`audio`、`network`、`styles` 组织，入口挂载与 `App.tsx` 分离。控制台主体从 1275 行拆至 142 行，状态与操作由 `useConsoleController` 管理，服务商编辑、Agent 表单、高级参数、任务卡片及日志独立维护。聊天主体从 709 行拆至 296 行，录音与选人状态由 `useChatController` 管理，消息、语音消息和选人列表独立维护。
+- 控制台、聊天与语音能力查询分别经过功能内的 `api.ts`，服务地址由 `network/endpoints.ts` 统一解析。取消中的列表与模型响应不会回写状态；保留语音组件持续挂载、关闭控制台停止轮询、聊天卸载释放采集与上传的行为。生成目录不参与源码类型检查。
+- `pnpm check` 通过：30 个测试文件、207 项测试、类型检查和全部应用构建。新增 15 项请求边界测试覆盖方法/路径/参数、空密钥保留、原始音频上传、当前令牌、取消信号及错误响应。格式检查与工作区/暂存区差异检查通过。
+- 隔离浏览器使用真实组件与固定 HTTP 响应，验证 Agent 编辑不启动任务、固定/随机设置、预算参数、继续/暂停/取消/新任务、语音开关、日志、服务商保存、切换服务商取消模型请求。关闭控制台等待超过轮询间隔后请求数不再增长；切换分类和关闭重开后，语音输入 DOM 实例、草稿与语言均保留。
+- 聊天浏览器验证输入内 @ 与键盘确认、群聊清空接收者、私聊保留接收者、空搜索回车不发送。合成音频通过真实 MediaRecorder 生成草稿，试听和丢弃正常，录音轨道结束。没有采集硬件麦克风，也没有向真实世界发送消息。
+- 静态生产构建通过实际浏览器加载，App 与控制台正常挂载；从构建产物取出的 Worklet 模块通过 `AudioContext.audioWorklet.addModule` 加载，并实际输出 3200 字节 PCM 数据块。后端请求全部拦截为固定响应，没有连接真实世界或调用模型。验收过程中没有页面脚本异常。
+- 截图保存在本地忽略目录 `output/playwright/web-refactor-console.png`、`web-refactor-chat.png`、`web-refactor-production.png`。本轮未重启既有开发服务；临时验收页面、独立浏览器会话和临时服务已清理。

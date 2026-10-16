@@ -70,6 +70,29 @@ apps/server/
 
 `pnpm test:agents`、`pnpm test:chat`、`pnpm test:agent:voice`、`pnpm test:agent:tasks` 和 `pnpm test:agent:deepseek` 指向服务端集成脚本，使用隔离世界和固定模型响应。实时会话集成与沙盒命令见 [百炼实时语音](docs/ALIYUN_REALTIME.md)。这些脚本由 `tsx` 显式运行，不进入默认 Vitest 扫描；根目录 `pnpm test:integration` 仍是需要已启动服务的 Agent 客户端集成检查。
 
+前端按功能与基础设施组织：
+
+```text
+apps/web/src/
+├── main.tsx                # React 挂载与单个世界连接的热更新清理
+├── App.tsx                 # 大厅、游戏场景与面板装配
+├── features/
+│   ├── console/            # 控制台、表单、任务卡片、状态控制器与 API
+│   ├── chat/               # 消息、选人、录音草稿、状态控制器与 API
+│   ├── voice/              # 语音面板、能力查询与实时语音样式
+│   └── world/              # 在线玩家面板
+├── graphics/               # Three.js 场景、角色与名称牌
+├── audio/                  # 采集、播放、转写及 PCM Worklet
+├── network/                # 服务地址、连接与在线状态订阅
+└── styles/                 # 全局样式
+```
+
+功能的 HTTP 请求由对应 `api.ts` 管理；通用 HTTP/WebSocket 地址统一从 `network/endpoints.ts` 解析。音频基础设施保留自身的流处理与请求取消。组件不从录音模块获取服务地址，也不直接发起 HTTP 请求。单元测试可以就近维护，已有跨模块回归测试仍保留在根目录 `tests/`。
+
+控制台状态由 `useConsoleController` 持有，表单和任务卡片通过参数与回调交互；语音面板在切换分类或关闭控制台时保持挂载。`useChatController` 管理选人、录音与发送状态，并在断线或卸载时清理采集与上传。`pcm-worklet.js` 与加载它的 `realtime-audio.ts` 同目录。开发、独立预览与根目录测试继续使用相对导入，不要求路径别名。
+
+`output/`、`dist/` 和 `node_modules/` 不参与源码类型检查；历史临时验收文件不属于正式源码。
+
 ## 范围和限制
 
 这是本地单进程、单世界、最多 16 会话的原型，不是完整 Minecraft。地形 25×25、高度上限 15；没有背包、合成、战斗、账户鉴权、反作弊运营、多人分片或生产部署。方块编辑持久化，玩家位置、聊天、事件和语音会话暂不持久化。事件环形缓存保留最近 100 条，观察返回最近 30 条当前会话有权接收的事件。

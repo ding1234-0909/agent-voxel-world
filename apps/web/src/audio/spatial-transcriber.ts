@@ -1,4 +1,4 @@
-import { voiceApi } from './local-recorder';
+import { serverHttpUrl } from '../network/endpoints';
 export type TranscriptionState = {
   status: string;
   text: string;
@@ -37,15 +37,18 @@ export class SpatialTranscriber {
     this.requests.add(abort);
     const timer = setTimeout(() => abort.abort(), 30000);
     try {
-      const res = await this.request(`${voiceApi()}/chat/spatial/${path}`, {
-        method,
-        headers: {
-          Authorization: `Bearer ${this.token()}`,
-          ...(body ? { 'Content-Type': body.type } : {}),
+      const res = await this.request(
+        `${serverHttpUrl()}/chat/spatial/${path}`,
+        {
+          method,
+          headers: {
+            Authorization: `Bearer ${this.token()}`,
+            ...(body ? { 'Content-Type': body.type } : {}),
+          },
+          body,
+          signal: abort.signal,
         },
-        body,
-        signal: abort.signal,
-      });
+      );
       if (res.status === 204) return {};
       const data = await res.json();
       if (!res.ok) throw Error(data.error || '附近语音转写失败。');

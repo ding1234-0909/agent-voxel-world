@@ -1,3 +1,4 @@
+import { serverHttpUrl } from './endpoints';
 import type { WorldPresence } from '@voxel/shared';
 
 export class PresenceSubscription {
@@ -11,9 +12,7 @@ export class PresenceSubscription {
   start() {
     if (this.stream) return;
     clearTimeout(this.retry);
-    const endpoint = (
-      import.meta.env.VITE_SERVER_URL ?? 'ws://127.0.0.1:2567'
-    ).replace(/^ws/, 'http');
+    const endpoint = serverHttpUrl();
     const stream = new EventSource(`${endpoint}/world/presence`);
     this.stream = stream;
     const stale = () => {

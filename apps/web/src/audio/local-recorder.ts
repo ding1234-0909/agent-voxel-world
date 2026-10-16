@@ -1,8 +1,4 @@
-export const voiceApi = () =>
-  (import.meta.env?.VITE_SERVER_URL ?? 'ws://127.0.0.1:2567').replace(
-    /^ws/,
-    'http',
-  );
+import { serverHttpUrl } from '../network/endpoints';
 export type SpeechCapabilities = {
   local: { available: boolean; reason: string };
   ollamaConfigured: boolean;
@@ -162,7 +158,7 @@ export class LocalRecorder {
     callbacks.onState('thinking', 'Whisper 正在本机识别录音…');
     try {
       const response = await fetch(
-        `${voiceApi()}/voice/transcribe?language=${language.startsWith('zh') ? 'zh' : 'en'}`,
+        `${serverHttpUrl()}/voice/transcribe?language=${language.startsWith('zh') ? 'zh' : 'en'}`,
         {
           method: 'POST',
           headers: { 'Content-Type': audio.type || 'application/octet-stream' },

@@ -1,6 +1,6 @@
 import { spatialMix, type AgentSpeechEvent } from '@voxel/shared';
-import type { Connection } from './connection';
-import { voiceApi } from './local-recorder';
+import type { Connection } from '../network/connection';
+import { serverHttpUrl } from '../network/endpoints';
 
 type Link = Pick<Connection, 'players' | 'self' | 'status' | 'chatToken'>;
 /** Live speech only: no history replay when listening is enabled later. */
@@ -72,7 +72,7 @@ export class AgentSpeechPlayback {
     this.active = active;
     try {
       const response = await this.fetchAudio(
-        `${voiceApi()}/chat/agent-speech/${event.id}`,
+        `${serverHttpUrl()}/chat/agent-speech/${event.id}`,
         {
           headers: { Authorization: `Bearer ${this.link.chatToken}` },
           signal: active.abort.signal,

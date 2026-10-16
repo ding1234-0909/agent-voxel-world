@@ -1,5 +1,8 @@
 import { expect, it } from 'vitest';
-import { mentionQuery, consumeMention } from '../apps/web/src/chat-mentions';
+import {
+  mentionQuery,
+  consumeMention,
+} from '../apps/web/src/features/chat/chat-mentions';
 
 it('searches names containing spaces at the caret, without treating email as a mention', () => {
   expect(mentionQuery('@AI 探', 5)?.query).toBe('AI 探');

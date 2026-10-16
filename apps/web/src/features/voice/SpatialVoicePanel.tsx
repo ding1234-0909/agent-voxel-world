@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Connection } from './connection';
-import { SpatialVoice, type SpatialStatus } from './spatial-voice';
+import type { Connection } from '../../network/connection';
+import { SpatialVoice, type SpatialStatus } from '../../audio/spatial-voice';
 import {
   SpatialTranscriber,
   type TranscriptionState,
-} from './spatial-transcriber';
+} from '../../audio/spatial-transcriber';
 export function SpatialVoicePanel({ connection }: { connection: Connection }) {
   const [collapsed, setCollapsed] = useState(false);
   const [state, setState] = useState<SpatialStatus>({

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Connection } from './connection';
-import type { RealtimeEvent } from '../../../packages/shared/src/realtime';
-import { PCMPlayer, PCMCapture } from './realtime-audio';
+import type { Connection } from '../../network/connection';
+import type { RealtimeEvent } from '../../../../../packages/shared/src/realtime';
+import { PCMPlayer, PCMCapture } from '../../audio/realtime-audio';
 import './realtime.css';
 export function RealtimeVoicePanel({
   connection,

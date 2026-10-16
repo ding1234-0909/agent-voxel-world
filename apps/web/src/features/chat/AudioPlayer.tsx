@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { audioDuration, audioProgress } from './audio-timeline';
+import { audioDuration, audioProgress } from '../../audio/audio-timeline';
 
 const clock = (seconds: number) => {
   const total = Math.max(0, Math.floor(seconds));
