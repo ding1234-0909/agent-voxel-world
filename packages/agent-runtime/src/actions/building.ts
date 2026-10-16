@@ -1,22 +1,15 @@
-import { inBounds, key, type Material, type Vec3 } from '@voxel/shared';
+import { inBounds, key } from '@voxel/shared';
 import { setTimeout as pause } from 'node:timers/promises';
-import type { Observation, Session } from './session';
+import type {
+  Observation,
+  AgentSession,
+  PlannedEdit,
+  BuildAction,
+  BuildResult,
+} from '../contracts';
 
-export type PlannedEdit = Vec3 & { material: Material | null };
-export type BuildAction =
-  | { type: 'build'; blocks: PlannedEdit[] }
-  | {
-      type: 'house';
-      x: number;
-      y: number;
-      z: number;
-      width: number;
-      depth: number;
-      height: number;
-      material: Material;
-      door: 'north' | 'south' | 'east' | 'west';
-    };
 export const BUILD_STEP_MS = 125;
+
 export const MAX_BATCH_BLOCKS = 64;
 
 export function parsePlannedEdit(value: unknown): PlannedEdit {
@@ -112,19 +105,9 @@ export function houseBlocks(
   return blocks;
 }
 
-export type BuildResult = {
-  ok: boolean;
-  total: number;
-  completed: number;
-  skipped: number;
-  remaining: PlannedEdit[];
-  failures: { block: PlannedEdit; error: string }[];
-  note: string;
-};
-
 /** One inference drives many individually acknowledged, rate-bounded edits. */
 export async function executeBuild(
-  session: Pick<Session, 'request'>,
+  session: Pick<AgentSession, 'request'>,
   action: BuildAction,
   signal: AbortSignal,
   progress: (message: string) => void = () => {},

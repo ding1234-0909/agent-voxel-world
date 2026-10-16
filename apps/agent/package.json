@@ -3,14 +3,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "tsx src/demo.ts",
-    "test:integration": "tsx src/integration.ts",
+    "start": "tsx src/cli/scout.ts",
+    "test:integration": "tsx test/integration.ts",
     "build": "tsc --noEmit",
-    "deepseek": "tsx src/deepseek-main.ts"
+    "deepseek": "tsx src/cli/deepseek.ts"
   },
   "dependencies": {
-    "@voxel/shared": "workspace:*",
-    "colyseus.js": "^0.16.19",
-    "openai": "^7.34.0"
+    "@voxel/agent-runtime": "workspace:*"
   }
 }

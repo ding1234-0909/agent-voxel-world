@@ -3,8 +3,13 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AgentManager, ProviderStore } from '../apps/server/src/agent/manager';
-import { DeepSeekError, type ModelPlanner } from '../apps/agent/src/deepseek';
-import type { Session, Observation } from '../apps/agent/src/session';
+import {
+  AgentRuntimeError,
+  type Planner,
+  type Session,
+  type Observation,
+} from '@voxel/agent-runtime';
+
 import type { WorldEvent } from '../packages/shared/src/index';
 let dir: string, store: ProviderStore, manager: AgentManager | undefined;
 beforeEach(async () => {
@@ -49,13 +54,13 @@ function fakeSession(wait = Promise.resolve()) {
 }
 function setup(
   s: ReturnType<typeof fakeSession>,
-  decide: ModelPlanner['decide'] = vi.fn(async () => ({
+  decide: Planner['decide'] = vi.fn(async () => ({
     type: 'wait' as const,
   })),
 ) {
   manager = new AgentManager(store, 'ws://fixture', {
     session: () => s as unknown as Session,
-    planner: () => ({ decide }) as unknown as ModelPlanner,
+    planner: () => ({ decide }),
     models: async () => [],
   });
   return manager;
@@ -139,7 +144,7 @@ it('task errors leave a joined character online until explicitly closed', async 
   const s = fakeSession(),
     decide = vi
       .fn()
-      .mockRejectedValue(new DeepSeekError('fixture failure', true));
+      .mockRejectedValue(new AgentRuntimeError('fixture failure', true));
   const m = setup(s, decide),
     job = m.create(settings);
   await vi.waitFor(() => expect(m.list()[0]?.status).toBe('failed'));
@@ -335,7 +340,7 @@ it('expired private task audiences cannot be resumed after server restart', asyn
 
 it('keeps the current chat-assigned goal consistent through editing, persistence and rerunning', async () => {
   const s = fakeSession();
-  const decide = vi.fn<ModelPlanner['decide']>(async () => ({ type: 'wait' }));
+  const decide = vi.fn<Planner['decide']>(async () => ({ type: 'wait' }));
   const m = setup(s, decide),
     job = m.create(settings);
   await vi.waitFor(() => expect(m.list()[0].status).toBe('idle'));
@@ -396,8 +401,8 @@ it('keeps the current chat-assigned goal consistent through editing, persistence
 it('an online agent with a failed task still accepts a new human mention without automatic retries', async () => {
   const s = fakeSession();
   const decide = vi
-    .fn<ModelPlanner['decide']>()
-    .mockRejectedValueOnce(new DeepSeekError('fixture failure', true));
+    .fn<Planner['decide']>()
+    .mockRejectedValueOnce(new AgentRuntimeError('fixture failure', true));
   const m = setup(s, decide),
     job = m.create({ ...settings, maxTurns: 30 });
   await vi.waitFor(() => expect(m.list()[0].status).toBe('failed'));

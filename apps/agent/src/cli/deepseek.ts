@@ -1,14 +1,14 @@
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { Session } from './session';
 import {
-  agentConfig,
-  DeepSeekPlanner,
-  DeepSeekError,
+  Session,
+  ModelPlanner,
+  AgentRuntimeError,
   runAgent,
-} from './deepseek';
+} from '@voxel/agent-runtime';
+import { agentConfig } from './deepseek-config';
 
-const envPath = fileURLToPath(new URL('../../../.env', import.meta.url));
+const envPath = fileURLToPath(new URL('../../../../.env', import.meta.url));
 if (existsSync(envPath)) process.loadEnvFile(envPath);
 const abort = new AbortController();
 let session: Session | undefined;
@@ -33,17 +33,17 @@ try {
     !abort.signal.aborted &&
     (await session.observe()).self.kind !== 'ai-agent'
   )
-    throw new DeepSeekError(
+    throw new AgentRuntimeError(
       '当前世界服务尚未加载 AI 玩家支持，请使用最新代码重启世界服务后再运行。',
       true,
     );
   if (!abort.signal.aborted)
     await session.request('agent.voice', { enabled: !!config.voiceReplies });
-  await runAgent(session, new DeepSeekPlanner(config), config, abort.signal);
+  await runAgent(session, new ModelPlanner(config), config, abort.signal);
 } catch (error) {
   if (!abort.signal.aborted) {
     console.error(
-      error instanceof DeepSeekError || !session
+      error instanceof AgentRuntimeError || !session
         ? (error as Error).message
         : '无法连接世界或运行 Agent，请确认 SERVER_URL 和世界服务。',
     );

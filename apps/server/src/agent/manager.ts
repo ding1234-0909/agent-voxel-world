@@ -8,17 +8,19 @@ import type {
   ManagedAgentView,
   ProviderView,
 } from '@voxel/shared';
-import { Session } from '../../../agent/src/session';
-import { runTaskStep, newTask } from '../../../agent/src/task-runtime';
-import { AgentAttention } from '../../../agent/src/attention';
 import {
+  Session,
+  runTaskStep,
+  newTask,
+  AgentAttention,
   ModelPlanner,
-  DeepSeekError,
+  AgentRuntimeError,
   listModels,
   nextIntervalMs,
   type AgentConfig,
+  type Planner,
   type AgentRunState,
-} from '../../../agent/src/deepseek';
+} from '@voxel/agent-runtime';
 
 export class ManagementError extends Error {
   constructor(
@@ -420,7 +422,7 @@ export class AgentManager {
     private serverUrl: string,
     private dependencies = {
       session: (url: string) => new Session(url),
-      planner: (config: AgentConfig, provider: SavedProvider) =>
+      planner: (config: AgentConfig, provider: SavedProvider): Planner =>
         new ModelPlanner(config, fetch, provider),
       models: (provider: SavedProvider) =>
         listModels(provider, provider.apiKey),
@@ -814,7 +816,7 @@ export class AgentManager {
       finalStatus = 'failed';
       if (!job.abort.signal.aborted)
         log(
-          error instanceof DeepSeekError
+          error instanceof AgentRuntimeError
             ? error.message
             : '无法加入世界或执行动作，请检查世界连接和模型配置。',
         );

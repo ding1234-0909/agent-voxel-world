@@ -4,13 +4,14 @@ import { createServer } from 'node:http';
 import { Server, matchMaker } from '@colyseus/core';
 import { WebSocketTransport } from '@colyseus/ws-transport';
 import { WorldRoom } from '../../src/world/room';
-import { Session, until } from '../../../agent/src/session';
 import {
-  agentConfig,
-  DeepSeekPlanner,
+  Session,
+  until,
+  ModelPlanner,
   runAgent,
-} from '../../../agent/src/deepseek';
-import { houseBlocks, type BuildAction } from '../../../agent/src/building';
+  houseBlocks,
+  type BuildAction,
+} from '@voxel/agent-runtime';
 
 process.env.DATABASE_URL = '';
 process.env.VOICE_PROVIDER = 'mock';
@@ -75,16 +76,28 @@ try {
     );
   };
   const config = {
-    ...agentConfig({
-      DEEPSEEK_API_KEY: 'fixture-only',
-      AGENT_ALLOW_EDITS: 'true',
-    }),
+    apiKey: 'fixture-only',
+    name: 'Fixture',
+    model: 'deepseek-flash',
+    goal: '测试任务',
+    allowEdits: true,
+    voiceReplies: false,
+    continuous: false,
+    intervalMode: 'fixed' as const,
+    intervalMinMs: 4000,
+    intervalMaxMs: 8000,
+    thinking: 'disabled' as const,
+    reasoningEffort: 'high' as const,
+    maxTokens: 512,
+    tokenBudget: 50000,
+    taskTimeoutMs: 900000,
+    timeoutMs: 30000,
     maxTurns: 4,
     intervalMs: 0,
   };
   await runAgent(
     session,
-    new DeepSeekPlanner(config, request),
+    new ModelPlanner(config, request),
     config,
     new AbortController().signal,
     () => {},

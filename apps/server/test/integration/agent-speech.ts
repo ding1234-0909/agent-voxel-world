@@ -8,7 +8,7 @@ import { AgentSpeech } from '../../src/agent/speech';
 import { installChatRoutes } from '../../src/routes/chat.routes';
 import { LocalTts } from '../../src/audio/local-tts';
 import { validatePcmWav } from '../../src/audio/local-speech';
-import { Session, until, delay } from '../../../agent/src/session';
+import { Session, until, delay } from '@voxel/agent-runtime';
 import type { AgentSpeechEvent } from '@voxel/shared';
 process.env.DATABASE_URL = '';
 process.env.VOICE_PROVIDER = 'mock';

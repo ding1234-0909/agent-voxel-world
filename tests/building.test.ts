@@ -1,12 +1,14 @@
+import { agentConfig } from '../apps/agent/src/cli/deepseek-config';
 import { describe, it, expect, vi } from 'vitest';
 import {
   parseAction,
   executeAction,
   runAgent,
-  agentConfig,
-} from '../apps/agent/src/deepseek';
-import { houseBlocks, type BuildAction } from '../apps/agent/src/building';
-import type { Observation, Session } from '../apps/agent/src/session';
+  houseBlocks,
+  type BuildAction,
+  type Observation,
+  type Session,
+} from '@voxel/agent-runtime';
 
 const observation: Observation = {
   id: 'obs',

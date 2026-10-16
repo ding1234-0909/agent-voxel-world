@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { Session, delay, until } from './session';
+import { Session, delay, until } from '@voxel/agent-runtime';
 const a = await new Session().join('Test-A', 'human'),
   b = await new Session().join('Test-B', 'human'),
   agent = await new Session().join('Validator · scripted test');

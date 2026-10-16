@@ -1,7 +1,10 @@
 import { expect, it } from 'vitest';
-import { AgentAttention } from '../apps/agent/src/attention';
-import { agentChatContext } from '../apps/agent/src/deepseek';
-import type { Observation } from '../apps/agent/src/session';
+import {
+  AgentAttention,
+  agentChatContext,
+  type Observation,
+} from '@voxel/agent-runtime';
+
 import type { WorldEvent } from '../packages/shared/src/index';
 const message = (
   seq: number,

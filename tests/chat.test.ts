@@ -7,8 +7,12 @@ import {
   type WorldEvent,
 } from '../packages/shared/src/index';
 import { WorldChat } from '../apps/server/src/chat/chat';
-import { agentChatContext, executeAction } from '../apps/agent/src/deepseek';
-import type { Observation } from '../apps/agent/src/session';
+import {
+  agentChatContext,
+  executeAction,
+  type Observation,
+} from '@voxel/agent-runtime';
+
 const player = (id: string): Player => ({
   id,
   name: id,

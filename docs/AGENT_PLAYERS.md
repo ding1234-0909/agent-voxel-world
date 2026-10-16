@@ -1,6 +1,32 @@
 # 接入 AI 玩家
 
-DeepSeek 玩家复用 `apps/agent/src/session.ts`，通过 OpenAI 官方 Node SDK 连接 `https://api.deepseek.com`，运行“观察 → JSON 动作决策 → 本地校验 → 世界服务执行 → 观察结果”循环。它不是 Voice Lab 的语音聊天提供商，也不是原有固定脚本 Scout。
+DeepSeek 玩家与服务端托管 Agent 复用 `@voxel/agent-runtime` 中的 `Session`，通过 OpenAI 官方 Node SDK 连接 `https://api.deepseek.com`，运行“观察 → JSON 动作决策 → 本地校验 → 世界服务执行 → 观察结果”循环。它不是 Voice Lab 的语音聊天提供商，也不是原有固定脚本 Scout。
+
+## 代码职责与依赖
+
+`apps/agent` 只保留可执行入口和 DeepSeek 环境变量解析。可复用代码位于 `packages/agent-runtime`，服务端和 CLI 均通过包入口引用，服务端不依赖 CLI 源文件。
+
+```text
+apps/agent/
+├── src/cli/
+│   ├── scout.ts            # pnpm agent
+│   ├── deepseek.ts         # pnpm agent:deepseek，加载根目录 .env
+│   └── deepseek-config.ts  # DeepSeek 专用环境变量与默认值
+└── test/integration.ts     # pnpm test:integration，需要 PostgreSQL 世界
+
+packages/agent-runtime/src/
+├── index.ts                # 明确列出的公共 API
+├── contracts.ts            # 会话、动作、决策、配置与 Planner 接口
+├── errors.ts               # AgentRuntimeError
+├── client/session.ts       # Colyseus 连接与世界协议
+├── actions/                # 动作解析、执行和连续建造
+├── planner/                # OpenAI 兼容适配、提示词和决策解析
+└── runtime/                # 任务状态、消息关注队列、单步执行与 CLI 循环
+```
+
+`contracts.ts` 仅依赖共享协议类型；任务执行依赖 `Planner` 接口，不依赖具体模型实现。模型规划器和任务执行器共享动作/任务解析规则；包内使用具体模块路径，避免通过公共入口反向导入形成循环。公共入口不加载 `.env`、注册退出信号或启动 Agent。
+
+服务端 `AgentManager` 保留调度权：每次唤醒调用一次 `runTaskStep`，空轮询和等待条件未变化时不推理。CLI 使用 `runAgent` 驱动循环并在任务停止时退出。`ModelPlanner` 支持 DeepSeek、Ollama 和 OpenAI 兼容接口；`pnpm agent:deepseek` 仍使用 DeepSeek 专用配置和启动提示。
 
 ## 大厅控制台（推荐）
 

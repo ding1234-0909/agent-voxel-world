@@ -46,7 +46,8 @@ pnpm format:check
 - `apps/web`：React UI、Three.js 实例化体素、插值、重连。
 - `apps/server`：Colyseus 单一权威世界、事务存储、语音 provider 接口。
 - `apps/server/prisma`：PostgreSQL schema 和可重放迁移。
-- `apps/agent`：显式标注的脚本测试 Agent、结构化 SDK、集成检查。
+- `apps/agent`：Scout 与 DeepSeek CLI 入口、命令行配置、集成检查。
+- `packages/agent-runtime`：CLI 与服务端共用的会话客户端、动作、模型规划和任务运行时，通过 `@voxel/agent-runtime` 引用。
 - DeepSeek AI 玩家：配置 `DEEPSEEK_API_KEY` 后运行 `pnpm agent:deepseek`，支持观察、移动、聊天和显式开启的方块编辑。使用 OpenAI 官方 SDK，支持 DeepSeek 思考模式；启动端口与配置见 [Agent 接入](docs/AGENT_PLAYERS.md)。
 - `packages/shared`：协议、确定性地形、物理与校验。
 

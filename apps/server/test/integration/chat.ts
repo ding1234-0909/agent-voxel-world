@@ -6,7 +6,7 @@ import { WebSocketTransport } from '@colyseus/ws-transport';
 import { WorldRoom } from '../../src/world/room';
 import { installChatRoutes } from '../../src/routes/chat.routes';
 import { LocalSpeech } from '../../src/audio/local-speech';
-import { Session, until, delay } from '../../../agent/src/session';
+import { Session, until, delay } from '@voxel/agent-runtime';
 process.env.DATABASE_URL = '';
 process.env.VOICE_PROVIDER = 'mock';
 process.env.WEB_ORIGIN = 'http://127.0.0.1:5187';

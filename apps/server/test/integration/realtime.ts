@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 import { Server, matchMaker } from '@colyseus/core';
 import { WebSocketTransport } from '@colyseus/ws-transport';
 import { WorldRoom } from '../../src/world/room';
-import { Session, until, delay } from '../../../agent/src/session';
+import { Session, until, delay } from '@voxel/agent-runtime';
 import type { RealtimeEvent } from '../../../../packages/shared/src/realtime';
 // Isolated ephemeral world. Does not load .env, provider stores, agents, credentials or production data.
 process.env.DATABASE_URL = '';

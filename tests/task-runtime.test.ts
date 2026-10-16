@@ -1,13 +1,15 @@
+import { agentConfig } from '../apps/agent/src/cli/deepseek-config';
 import { describe, expect, it, vi } from 'vitest';
-import { AgentAttention } from '../apps/agent/src/attention';
-import { agentConfig, type AgentDecision } from '../apps/agent/src/deepseek';
 import {
+  AgentAttention,
+  type AgentDecision,
   newTask,
   runTaskStep,
   parseTaskDirective,
   type AgentRunState,
-} from '../apps/agent/src/task-runtime';
-import type { Session, Observation } from '../apps/agent/src/session';
+  type Session,
+  type Observation,
+} from '@voxel/agent-runtime';
 
 const cfg = () => ({
   ...agentConfig({ DEEPSEEK_API_KEY: 'fixture' }),

@@ -11,6 +11,9 @@ importers:
       '@types/node':
         specifier: ^22.18.0
         version: 22.20.5
+      '@voxel/agent-runtime':
+        specifier: workspace:*
+        version: link:packages/agent-runtime
       concurrently:
         specifier: ^9.2.1
         version: 9.2.5
@@ -29,15 +32,9 @@ importers:
 
   apps/agent:
     dependencies:
-      '@voxel/shared':
+      '@voxel/agent-runtime':
         specifier: workspace:*
-        version: link:../../packages/shared
-      colyseus.js:
-        specifier: ^0.16.19
-        version: 0.16.22
-      openai:
-        specifier: ^7.34.0
-        version: 7.34.0(ws@8.22.0)
+        version: link:../../packages/agent-runtime
 
   apps/server:
     dependencies:
@@ -53,6 +50,9 @@ importers:
       '@prisma/client':
         specifier: 6.19.0
         version: 6.19.0(prisma@6.19.0(typescript@5.9.3))(typescript@5.9.3)
+      '@voxel/agent-runtime':
+        specifier: workspace:*
+        version: link:../../packages/agent-runtime
       '@voxel/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -112,6 +112,18 @@ importers:
       vite:
         specifier: ^7.1.7
         version: 7.3.7(@types/node@22.20.5)(jiti@2.7.0)(tsx@4.23.15)
+
+  packages/agent-runtime:
+    dependencies:
+      '@voxel/shared':
+        specifier: workspace:*
+        version: link:../shared
+      colyseus.js:
+        specifier: ^0.16.19
+        version: 0.16.22
+      openai:
+        specifier: ^7.34.0
+        version: 7.34.0(ws@8.22.0)
 
   packages/shared: {}
 

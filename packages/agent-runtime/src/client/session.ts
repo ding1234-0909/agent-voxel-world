@@ -1,24 +1,10 @@
 import { Client, type Room } from 'colyseus.js';
-import type { Snapshot, Edit, Player, Block, WorldEvent } from '@voxel/shared';
-export type Observation = {
-  id: string;
-  revision: number;
-  self: Player;
-  players: Player[];
-  blocks: Block[];
-  events: WorldEvent[];
-  radius: number;
-  allowedActions: string[];
-  attention?: WorldEvent;
-};
-export type Result = {
-  id: string;
-  ok: boolean;
-  error?: string;
-  revision: number;
-};
+import type { Snapshot, Edit, WorldEvent } from '@voxel/shared';
+import type { Observation, Result } from '../contracts';
+
 export const delay = (ms: number) =>
   new Promise((resolve) => setTimeout(resolve, ms));
+
 export async function until(predicate: () => boolean, timeout = 5000) {
   const start = Date.now();
   while (!predicate()) {
@@ -27,6 +13,7 @@ export async function until(predicate: () => boolean, timeout = 5000) {
     await delay(25);
   }
 }
+
 export class Session {
   room!: Room;
   client: Client;

@@ -1,3 +1,4 @@
+import { agentConfig } from '../apps/agent/src/cli/deepseek-config';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -8,11 +9,11 @@ import {
   validateProvider,
 } from '../apps/server/src/agent/manager';
 import {
-  agentConfig,
   ModelPlanner,
   listModels,
-} from '../apps/agent/src/deepseek';
-import type { Observation } from '../apps/agent/src/session';
+  type Observation,
+} from '@voxel/agent-runtime';
+
 const folders: string[] = [];
 afterEach(async () => {
   await Promise.all(

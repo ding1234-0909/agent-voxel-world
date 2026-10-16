@@ -1,0 +1,16 @@
+{
+  "name": "@voxel/agent-runtime",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@voxel/shared": "workspace:*",
+    "colyseus.js": "^0.16.19",
+    "openai": "^7.34.0"
+  }
+}

@@ -1,15 +1,17 @@
+import { agentConfig } from '../apps/agent/src/cli/deepseek-config';
 import { describe, it, expect, vi } from 'vitest';
 import {
-  agentConfig,
   parseAction,
   parseDecision,
-  DeepSeekPlanner,
-  DeepSeekError,
+  ModelPlanner,
+  AgentRuntimeError,
   executeAction,
   runAgent,
   nextIntervalMs,
-} from '../apps/agent/src/deepseek';
-import type { Observation, Session } from '../apps/agent/src/session';
+  type Observation,
+  type Session,
+} from '@voxel/agent-runtime';
+
 const config = () => ({
   ...agentConfig({ DEEPSEEK_API_KEY: 'test-key' }),
   intervalMs: 0,
@@ -81,7 +83,7 @@ describe('DeepSeek agent boundary', () => {
     const request = vi
       .fn<typeof fetch>()
       .mockResolvedValue(response('{"type":"chat","text":"你好"}'));
-    const planner = new DeepSeekPlanner(config(), request);
+    const planner = new ModelPlanner(config(), request);
     expect(await planner.decide(observation, null, signal())).toEqual({
       type: 'chat',
       text: '你好',
@@ -110,7 +112,7 @@ describe('DeepSeek agent boundary', () => {
       DEEPSEEK_THINKING: 'enabled',
       DEEPSEEK_REASONING_EFFORT: 'high',
     });
-    await new DeepSeekPlanner(cfg, request).decide(observation, null, signal());
+    await new ModelPlanner(cfg, request).decide(observation, null, signal());
     expect(JSON.parse(request.mock.calls[0][1]!.body as string)).toMatchObject({
       model: 'deepseek-flash',
       thinking: { type: 'enabled' },
@@ -124,14 +126,14 @@ describe('DeepSeek agent boundary', () => {
     ['not json', 'stop'],
     ['{"type":"shell"}', 'stop'],
   ])('skips empty, truncated and invalid plans', async (text, reason) => {
-    const planner = new DeepSeekPlanner(
+    const planner = new ModelPlanner(
       config(),
       vi.fn<typeof fetch>().mockResolvedValue(response(text, reason)),
     );
     await expect(planner.decide(observation, null, signal())).rejects.toThrow();
   });
   it('redacts upstream errors and treats bad credentials as fatal', async () => {
-    const planner = new DeepSeekPlanner(
+    const planner = new ModelPlanner(
       config(),
       vi
         .fn<typeof fetch>()
@@ -158,11 +160,7 @@ describe('DeepSeek agent boundary', () => {
         }),
     );
     await expect(
-      new DeepSeekPlanner(config(), request).decide(
-        observation,
-        null,
-        signal(),
-      ),
+      new ModelPlanner(config(), request).decide(observation, null, signal()),
     ).rejects.toThrow('超时');
     const abort = new AbortController();
     abort.abort();
@@ -170,11 +168,7 @@ describe('DeepSeek agent boundary', () => {
       .fn<typeof fetch>()
       .mockResolvedValue(response('{"type":"wait"}'));
     await expect(
-      new DeepSeekPlanner(config(), late).decide(
-        observation,
-        null,
-        abort.signal,
-      ),
+      new ModelPlanner(config(), late).decide(observation, null, abort.signal),
     ).rejects.toThrow('已停止');
   });
 });
@@ -258,7 +252,7 @@ describe('AI action execution', () => {
     const s = session(),
       decide = vi
         .fn()
-        .mockRejectedValue(new DeepSeekError('temporarily unavailable'));
+        .mockRejectedValue(new AgentRuntimeError('temporarily unavailable'));
     await expect(
       runAgent(
         s as unknown as Session,
@@ -408,7 +402,9 @@ describe('continuous and randomized scheduling', () => {
     }
   });
   it('still terminates continuous mode after repeated provider failures', async () => {
-    const decide = vi.fn().mockRejectedValue(new DeepSeekError('unavailable'));
+    const decide = vi
+      .fn()
+      .mockRejectedValue(new AgentRuntimeError('unavailable'));
     await expect(
       runAgent(
         { observe: async () => observation, move: vi.fn(), request: vi.fn() },
@@ -441,7 +437,7 @@ describe('task decision output formats', () => {
       .fn<typeof fetch>()
       .mockResolvedValue(response(JSON.stringify(value)));
     expect(
-      await new DeepSeekPlanner(config(), request).decide(
+      await new ModelPlanner(config(), request).decide(
         observation,
         null,
         signal(),

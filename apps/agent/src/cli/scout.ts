@@ -1,4 +1,4 @@
-import { Session, delay } from './session';
+import { Session, delay } from '@voxel/agent-runtime';
 let agent: Session | undefined,
   closing = false;
 console.log(

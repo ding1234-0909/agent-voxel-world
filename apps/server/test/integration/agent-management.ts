@@ -9,8 +9,13 @@ import { WebSocketTransport } from '@colyseus/ws-transport';
 import { WorldRoom } from '../../src/world/room';
 import { AgentManager, ProviderStore } from '../../src/agent/manager';
 import { installAgentRoutes } from '../../src/routes/agent.routes';
-import { Session, until, type Observation } from '../../../agent/src/session';
-import { ModelPlanner } from '../../../agent/src/deepseek';
+import {
+  Session,
+  until,
+  type Observation,
+  ModelPlanner,
+} from '@voxel/agent-runtime';
+
 import type { ManagedAgentView } from '@voxel/shared';
 process.env.DATABASE_URL = '';
 process.env.VOICE_PROVIDER = 'mock';

@@ -1,104 +1,18 @@
-import type { AgentTask, AgentUsage } from '@voxel/shared';
+import type { AgentTask, ChatData } from '@voxel/shared';
 import { setTimeout as delay } from 'node:timers/promises';
-import type { ChatData } from '@voxel/shared';
-import type { Session, Observation } from './session';
+import type {
+  AgentSession,
+  Observation,
+  AgentConfig,
+  Planner,
+} from '../contracts';
 import type { AgentAttention } from './attention';
-import {
-  executeAction,
-  parseAction,
-  DeepSeekError,
-  type AgentConfig,
-  type ModelPlanner,
-} from './deepseek';
-import { houseBlocks, type BuildAction, type BuildResult } from './building';
+import { parseTaskDirective, newTask, type AgentRunState } from './task';
+import { executeAction } from '../actions/execute';
+import { parseAction } from '../actions/parse';
+import { AgentRuntimeError } from '../errors';
+import { houseBlocks } from '../actions/building';
 
-export type TaskDirective = {
-  intent:
-    | 'reply'
-    | 'task'
-    | 'update'
-    | 'continue'
-    | 'pause'
-    | 'resume'
-    | 'cancel';
-  status: 'running' | 'waiting' | 'needs_input' | 'blocked' | 'completed';
-  summary: string;
-  goal?: string;
-  waitFor?: 'world' | 'players';
-};
-export function parseTaskDirective(value: unknown): TaskDirective {
-  if (!value || typeof value !== 'object' || Array.isArray(value))
-    throw Error('任务决策无效。');
-  const input = value as TaskDirective;
-  // JSON-mode providers often emit null for unused optional fields.
-  const v = {
-    ...input,
-    goal: input.goal ?? undefined,
-    waitFor: input.waitFor ?? undefined,
-  };
-  if (
-    ![
-      'reply',
-      'task',
-      'update',
-      'continue',
-      'pause',
-      'resume',
-      'cancel',
-    ].includes(v.intent) ||
-    !['running', 'waiting', 'needs_input', 'blocked', 'completed'].includes(
-      v.status,
-    ) ||
-    typeof v.summary !== 'string' ||
-    !v.summary.trim() ||
-    v.summary.length > 500 ||
-    (v.goal !== undefined &&
-      (typeof v.goal !== 'string' || !v.goal.trim() || v.goal.length > 2000)) ||
-    (v.intent === 'task' && !v.goal) ||
-    (v.waitFor !== undefined && !['world', 'players'].includes(v.waitFor)) ||
-    (v.status === 'waiting' && !v.waitFor)
-  )
-    throw Error('任务决策无效。');
-  return {
-    intent: v.intent,
-    status: v.status,
-    summary: v.summary.trim(),
-    goal: v.goal?.trim(),
-    waitFor: v.waitFor,
-  };
-}
-export type AgentRunState = {
-  task?: AgentTask;
-  usage?: AgentUsage;
-  previous?: unknown;
-  unfinishedBuild?: { action: BuildAction; result: BuildResult };
-  waitSignature?: string;
-  failures?: number;
-  noProgress?: number;
-  lastProgress?: string;
-  lastResponse?: string;
-  decisionError?: string;
-  audienceExpired?: boolean;
-};
-export function newTask(
-  goal: string,
-  owner?: string,
-  privateTo?: string,
-): AgentTask {
-  return {
-    goal,
-    owner,
-    privateTo,
-    status: 'running',
-    summary: '任务已接收，等待执行。',
-    reason: '',
-    calls: 0,
-    tokens: 0,
-    estimated: false,
-    startedAt: Date.now(),
-    elapsedMs: 0,
-  };
-}
 export function worldSignature(o: Observation, kind: AgentTask['waitFor']) {
   return JSON.stringify(
     kind === 'players'
@@ -114,6 +28,7 @@ export function worldSignature(o: Observation, kind: AgentTask['waitFor']) {
       : (o.blocks ?? []).map((b) => [b.x, b.y, b.z, b.material]).sort(),
   );
 }
+
 function cap(task: AgentTask, config: AgentConfig) {
   if (task.calls >= config.maxTurns)
     return '已达到任务调用上限，请检查进展后手动继续。';
@@ -123,11 +38,11 @@ function cap(task: AgentTask, config: AgentConfig) {
     return '已达到任务执行时间上限，请检查进展后手动继续。';
   return '';
 }
+
 /** One wake = at most one model call. Empty polls and unchanged waits cost no tokens. */
 export async function runTaskStep(
-  session: Pick<Session, 'observe' | 'move' | 'request'>,
-  planner: Pick<ModelPlanner, 'decide'> &
-    Partial<Pick<ModelPlanner, 'lastUsage'>>,
+  session: Pick<AgentSession, 'observe' | 'move' | 'request'>,
+  planner: Planner,
   config: AgentConfig,
   signal: AbortSignal,
   memory: AgentRunState,
@@ -267,7 +182,7 @@ export async function runTaskStep(
       ['reply', 'pause', 'cancel', 'resume'].includes(d.intent) &&
       !['wait', 'chat'].includes(action.type)
     )
-      throw new DeepSeekError(
+      throw new AgentRuntimeError(
         '回复或任务控制必须使用 chat / wait，不能附带移动或建造动作。',
       );
     // Some providers repeat the existing task as "task" or "update" on polls.
@@ -280,11 +195,11 @@ export async function runTaskStep(
     )
       d.intent = 'continue';
     if (!addressed && d.intent !== 'continue')
-      throw new DeepSeekError(
+      throw new AgentRuntimeError(
         '自动推进必须使用 intent=continue，不能创建或替换任务目标。',
       );
     if (addressed && d.intent === 'continue')
-      throw new DeepSeekError(
+      throw new AgentRuntimeError(
         '处理新消息时必须区分 reply、task、update 或任务控制，不能使用 continue。',
       );
     if (d.intent !== 'reply') {
@@ -311,7 +226,7 @@ export async function runTaskStep(
         memory.failures = 0;
         memory.lastProgress = undefined;
       } else if (!task || !visibleTask)
-        throw new DeepSeekError(
+        throw new AgentRuntimeError(
           '没有可修改的任务，请使用 task 创建明确的新任务。',
         );
       if (d.intent === 'update' && d.goal) task!.goal = d.goal;
@@ -485,7 +400,7 @@ export async function runTaskStep(
     if (signal.aborted) return;
     memory.failures = (memory.failures ?? 0) + 1;
     const reason =
-      error instanceof DeepSeekError
+      error instanceof AgentRuntimeError
         ? error.message
         : deadline.signal.aborted
           ? '本次任务决策超时，动作已停止。'
@@ -496,12 +411,12 @@ export async function runTaskStep(
     await notifySender(`这条消息处理失败：${reason} 请稍后重试。`);
     if (task && !addressed) {
       if (
-        (error instanceof DeepSeekError && error.fatal) ||
+        (error instanceof AgentRuntimeError && error.fatal) ||
         memory.failures >= 3
       ) {
         task.status = 'blocked';
         task.reason = reason;
-        throw new DeepSeekError('Agent 已停止自动执行：' + reason, true);
+        throw new AgentRuntimeError('Agent 已停止自动执行：' + reason, true);
       }
     }
   } finally {
