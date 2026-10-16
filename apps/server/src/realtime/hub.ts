@@ -3,8 +3,8 @@ import {
   type BailianConfig,
   type SceneAccess,
 } from './bailian';
-import { DemoSocket } from './bailian-demo';
-import type { RealtimeEvent } from '../../../packages/shared/src/realtime';
+import { DemoSocket } from './demo-socket';
+import type { RealtimeEvent } from '../../../../packages/shared/src/realtime';
 export class RealtimeHub {
   private sessions = new Map<string, BailianSession>();
   private requests = new Map<string, string>();

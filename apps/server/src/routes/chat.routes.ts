@@ -1,7 +1,7 @@
 import express, { type Express, type ErrorRequestHandler } from 'express';
-import { ChatError, type WorldChat } from './chat';
-import { LocalSpeech, SpeechError } from './local-speech';
-import type { AgentSpeech } from './agent-speech';
+import { ChatError, type WorldChat } from '../chat/chat';
+import { LocalSpeech, SpeechError } from '../audio/local-speech';
+import type { AgentSpeech } from '../agent/speech';
 export function installChatRoutes(
   app: Express,
   getChat: () => WorldChat | undefined,

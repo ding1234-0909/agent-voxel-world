@@ -2,7 +2,7 @@ import express from 'express';
 import { createServer } from 'node:http';
 import { Server, matchMaker } from '@colyseus/core';
 import { WebSocketTransport } from '@colyseus/ws-transport';
-import { WorldRoom } from './room';
+import { WorldRoom } from '../../src/world/room';
 // Deliberately never load dotenv, provider stores, saved agents, or production data.
 process.env.DATABASE_URL = '';
 process.env.VOICE_PROVIDER = 'mock';

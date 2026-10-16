@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { EventEmitter } from 'node:events';
-import { BailianSession, decodePCM } from '../apps/server/src/bailian';
-import { DemoSocket } from '../apps/server/src/bailian-demo';
+import { BailianSession, decodePCM } from '../apps/server/src/realtime/bailian';
+import { DemoSocket } from '../apps/server/src/realtime/demo-socket';
 import type { RealtimeEvent } from '../packages/shared/src/realtime';
 class Socket extends EventEmitter {
   bufferedAmount = 0;

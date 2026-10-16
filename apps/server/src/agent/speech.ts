@@ -6,8 +6,8 @@ import {
   type ChatData,
   type Player,
 } from '@voxel/shared';
-import { ChatError } from './chat';
-import { LocalTts, type SpeechSynthesizer } from './local-tts';
+import { ChatError } from '../chat/chat';
+import { LocalTts, type SpeechSynthesizer } from '../audio/local-tts';
 
 type Pending = {
   actor: string;

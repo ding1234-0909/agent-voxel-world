@@ -1,4 +1,4 @@
-import { installChatRoutes } from './chat-routes';
+import { installChatRoutes } from './routes/chat.routes';
 import { config } from 'dotenv';
 import { fileURLToPath } from 'node:url';
 config({ path: fileURLToPath(new URL('../../../.env', import.meta.url)) });
@@ -6,11 +6,11 @@ import express from 'express';
 import { createServer } from 'node:http';
 import { Server, matchMaker } from '@colyseus/core';
 import { WebSocketTransport } from '@colyseus/ws-transport';
-import { WorldRoom } from './room';
-import { installSpeechRoutes } from './speech-routes';
-import { installPresenceRoutes } from './presence-routes';
-import { AgentManager, ProviderStore } from './agent-manager';
-import { installAgentRoutes } from './agent-routes';
+import { WorldRoom } from './world/room';
+import { installSpeechRoutes } from './routes/speech.routes';
+import { installPresenceRoutes } from './routes/presence.routes';
+import { AgentManager, ProviderStore } from './agent/manager';
+import { installAgentRoutes } from './routes/agent.routes';
 const app = express();
 app.use((req, res, next) => {
   if (

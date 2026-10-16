@@ -5,7 +5,7 @@ import express, {
   type Response,
   type NextFunction,
 } from 'express';
-import { AgentManager, ManagementError } from './agent-manager';
+import { AgentManager, ManagementError } from '../agent/manager';
 export function installAgentRoutes(app: Express, manager: AgentManager) {
   const origin = process.env.WEB_ORIGIN ?? 'http://127.0.0.1:5173';
   app.use(

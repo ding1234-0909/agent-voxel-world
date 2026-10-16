@@ -1,7 +1,7 @@
-import { RealtimeHub } from './realtime-hub';
-import { WorldChat } from './chat';
-import { AgentSpeech } from './agent-speech';
-import { createVoiceProvider, type VoiceSession } from './voice';
+import { RealtimeHub } from '../realtime/hub';
+import { WorldChat } from '../chat/chat';
+import { AgentSpeech } from '../agent/speech';
+import { createVoiceProvider, type VoiceSession } from '../audio/voice';
 import { WorldStore } from './store';
 import { Room, Client } from '@colyseus/core';
 import { Schema, MapSchema, defineTypes } from '@colyseus/schema';

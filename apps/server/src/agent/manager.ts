@@ -8,9 +8,9 @@ import type {
   ManagedAgentView,
   ProviderView,
 } from '@voxel/shared';
-import { Session } from '../../agent/src/session';
-import { runTaskStep, newTask } from '../../agent/src/task-runtime';
-import { AgentAttention } from '../../agent/src/attention';
+import { Session } from '../../../agent/src/session';
+import { runTaskStep, newTask } from '../../../agent/src/task-runtime';
+import { AgentAttention } from '../../../agent/src/attention';
 import {
   ModelPlanner,
   DeepSeekError,
@@ -18,7 +18,7 @@ import {
   nextIntervalMs,
   type AgentConfig,
   type AgentRunState,
-} from '../../agent/src/deepseek';
+} from '../../../agent/src/deepseek';
 
 export class ManagementError extends Error {
   constructor(
@@ -218,7 +218,7 @@ export class ProviderStore {
   private queue: Promise<unknown> = Promise.resolve();
   constructor(
     readonly path = fileURLToPath(
-      new URL('../../../.data/agent-providers.json', import.meta.url),
+      new URL('../../../../.data/agent-providers.json', import.meta.url),
     ),
   ) {}
   async load(env = process.env) {

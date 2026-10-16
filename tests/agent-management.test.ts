@@ -6,7 +6,7 @@ import {
   ProviderStore,
   validateAgent,
   validateProvider,
-} from '../apps/server/src/agent-manager';
+} from '../apps/server/src/agent/manager';
 import {
   agentConfig,
   ModelPlanner,

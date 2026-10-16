@@ -6,12 +6,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Server, matchMaker } from '@colyseus/core';
 import { WebSocketTransport } from '@colyseus/ws-transport';
-import { WorldRoom } from './room';
-import { AgentManager, ProviderStore } from './agent-manager';
-import { installAgentRoutes } from './agent-routes';
-import { installPresenceRoutes } from './presence-routes';
-import { Session, until, delay } from '../../agent/src/session';
-import { ModelPlanner } from '../../agent/src/deepseek';
+import { WorldRoom } from '../../src/world/room';
+import { AgentManager, ProviderStore } from '../../src/agent/manager';
+import { installAgentRoutes } from '../../src/routes/agent.routes';
+import { installPresenceRoutes } from '../../src/routes/presence.routes';
+import { Session, until, delay } from '../../../agent/src/session';
+import { ModelPlanner } from '../../../agent/src/deepseek';
 import type { ManagedAgentView } from '@voxel/shared';
 
 process.env.DATABASE_URL = '';

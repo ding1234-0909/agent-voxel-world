@@ -50,6 +50,26 @@ pnpm format:check
 - DeepSeek AI 玩家：配置 `DEEPSEEK_API_KEY` 后运行 `pnpm agent:deepseek`，支持观察、移动、聊天和显式开启的方块编辑。使用 OpenAI 官方 SDK，支持 DeepSeek 思考模式；启动端口与配置见 [Agent 接入](docs/AGENT_PLAYERS.md)。
 - `packages/shared`：协议、确定性地形、物理与校验。
 
+服务端按职责组织，`src/index.ts` 负责启动、依赖装配和关闭清理：
+
+```text
+apps/server/
+├── prisma/                 # schema 与 migrations
+├── src/
+│   ├── index.ts
+│   ├── routes/             # HTTP 路由及就近维护的路由测试
+│   ├── world/              # 权威房间与世界持久化
+│   ├── agent/              # Agent 管理与语音回复
+│   ├── audio/              # 语音 provider、本地识别与合成
+│   ├── realtime/           # 实时会话、百炼适配器与离线协议模拟器
+│   └── chat/               # 消息分发与附件管理
+└── test/
+    ├── integration/        # 独立临时世界中的集成脚本
+    └── sandbox/            # 独立沙盒启动入口
+```
+
+`pnpm test:agents`、`pnpm test:chat`、`pnpm test:agent:voice`、`pnpm test:agent:tasks` 和 `pnpm test:agent:deepseek` 指向服务端集成脚本，使用隔离世界和固定模型响应。实时会话集成与沙盒命令见 [百炼实时语音](docs/ALIYUN_REALTIME.md)。这些脚本由 `tsx` 显式运行，不进入默认 Vitest 扫描；根目录 `pnpm test:integration` 仍是需要已启动服务的 Agent 客户端集成检查。
+
 ## 范围和限制
 
 这是本地单进程、单世界、最多 16 会话的原型，不是完整 Minecraft。地形 25×25、高度上限 15；没有背包、合成、战斗、账户鉴权、反作弊运营、多人分片或生产部署。方块编辑持久化，玩家位置、聊天、事件和语音会话暂不持久化。事件环形缓存保留最近 100 条，观察返回最近 30 条当前会话有权接收的事件。

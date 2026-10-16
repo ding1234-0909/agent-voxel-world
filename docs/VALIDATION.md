@@ -185,3 +185,11 @@
 - 本机 5187/2577 已加载新代码。更新前后逐块比对 2221 个方块与 revision 474 一致；AI 探索者位置、配置和语音开关保留，旧任务迁移为暂停。
 
 限制：大部分任务与建造验收使用确定性模型响应，证明调度、权限和实际动作执行，不代表任意自然语言任务都能被模型正确规划。token 缺少 usage 时为估算，最后一次请求可能超过剩余额度。游戏私聊使用会话身份；跨服务重启的私聊任务不能按同名玩家自动恢复。
+
+## 2026-10-16 服务端目录重构
+
+- 服务端源码按 `routes`、`world`、`agent`、`audio`、`realtime` 和 `chat` 分组；六个集成脚本迁入 `apps/server/test/integration`，离线沙盒迁入 `apps/server/test/sandbox`。运行时离线协议模拟器保留在 `src/realtime/demo-socket.ts`，路由测试随路由就近维护。
+- `pnpm check` 通过：27 个测试文件、192 项测试、类型检查和全部应用构建；`pnpm format:check` 和 `git diff --check` 通过。
+- `pnpm test:agents`、`pnpm test:chat`、`pnpm test:agent:voice`、`pnpm test:agent:tasks`、`pnpm test:agent:deepseek` 以及 `pnpm --filter @voxel/server exec tsx test/integration/realtime.ts` 全部通过。测试使用独立临时世界、固定模型响应及模拟音频，不调用云端模型。
+- 迁移后的离线沙盒启动成功，`GET /world` 返回房间 ID，随后正常关闭本次创建的进程。逐文件比对确认服务端 25 个文件除相对路径和格式外逻辑一致；基于文件位置解析的 `.env`、Agent 配置与 Whisper 模型路径仍指向原位置，生产模块没有引用服务端测试目录。
+- 本轮没有重启既有开发服务，没有运行会修改既有世界的根目录 `pnpm test:integration`；没有进行新的浏览器或真实模型/语音验收。

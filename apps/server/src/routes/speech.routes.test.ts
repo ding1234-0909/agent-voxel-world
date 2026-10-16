@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import { createServer, type Server } from 'node:http';
-import { installSpeechRoutes } from './speech-routes';
-import { LocalSpeech, SpeechError } from './local-speech';
+import { installSpeechRoutes } from './speech.routes';
+import { LocalSpeech, SpeechError } from '../audio/local-speech';
 describe('local speech HTTP boundary', () => {
   let server: Server, url: string;
   const transcribe = vi.fn();

@@ -1,5 +1,5 @@
 import { it, expect, vi } from 'vitest';
-import { RealtimeHub } from '../apps/server/src/realtime-hub';
+import { RealtimeHub } from '../apps/server/src/realtime/hub';
 it('cancels a pending demo handshake by owner request without accessing configuration', async () => {
   const events: any[] = [],
     config = vi.fn(() => {

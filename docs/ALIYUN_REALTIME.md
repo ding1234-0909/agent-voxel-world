@@ -11,7 +11,7 @@
 在项目根目录运行两个终端：
 
 ```sh
-pnpm --filter @voxel/server exec tsx src/realtime-sandbox.ts
+pnpm --filter @voxel/server exec tsx test/sandbox/realtime-sandbox.ts
 ```
 
 ```sh
@@ -66,7 +66,7 @@ node scripts/realtime-preview.mjs
 pnpm typecheck
 pnpm test
 pnpm build
-pnpm --filter @voxel/server exec tsx src/realtime-integration.ts
+pnpm --filter @voxel/server exec tsx test/integration/realtime.ts
 ```
 
 - TypeScript检查、构建通过；全量27个测试文件、186项测试通过（包括工作树中原有已暂存功能）。

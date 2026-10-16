@@ -1,7 +1,11 @@
 import express, { type Express, type ErrorRequestHandler } from 'express';
-import { LocalSpeech, SpeechError, MAX_AUDIO_BYTES } from './local-speech';
-import { createVoiceProvider } from './voice';
-import { LocalTts } from './local-tts';
+import {
+  LocalSpeech,
+  SpeechError,
+  MAX_AUDIO_BYTES,
+} from '../audio/local-speech';
+import { createVoiceProvider } from '../audio/voice';
+import { LocalTts } from '../audio/local-tts';
 export function installSpeechRoutes(app: Express, speech = new LocalSpeech()) {
   const origin = process.env.WEB_ORIGIN ?? 'http://127.0.0.1:5173';
   app.use('/voice', (req, res, next) => {

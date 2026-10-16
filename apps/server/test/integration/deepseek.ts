@@ -3,14 +3,14 @@ import express from 'express';
 import { createServer } from 'node:http';
 import { Server, matchMaker } from '@colyseus/core';
 import { WebSocketTransport } from '@colyseus/ws-transport';
-import { WorldRoom } from './room';
-import { Session, until } from '../../agent/src/session';
+import { WorldRoom } from '../../src/world/room';
+import { Session, until } from '../../../agent/src/session';
 import {
   agentConfig,
   DeepSeekPlanner,
   runAgent,
-} from '../../agent/src/deepseek';
-import { houseBlocks, type BuildAction } from '../../agent/src/building';
+} from '../../../agent/src/deepseek';
+import { houseBlocks, type BuildAction } from '../../../agent/src/building';
 
 process.env.DATABASE_URL = '';
 process.env.VOICE_PROVIDER = 'mock';

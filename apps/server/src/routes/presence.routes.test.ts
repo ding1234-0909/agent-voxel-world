@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import { createServer, type Server } from 'node:http';
 import type { WorldPresence } from '@voxel/shared';
-import { installPresenceRoutes } from './presence-routes';
+import { installPresenceRoutes } from './presence.routes';
 
 describe('read-only world presence stream', () => {
   let server: Server, url: string, state: WorldPresence | undefined;

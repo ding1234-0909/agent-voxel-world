@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { AgentManager, ProviderStore } from '../apps/server/src/agent-manager';
+import { AgentManager, ProviderStore } from '../apps/server/src/agent/manager';
 import { DeepSeekError, type ModelPlanner } from '../apps/agent/src/deepseek';
 import type { Session, Observation } from '../apps/agent/src/session';
 import type { WorldEvent } from '../packages/shared/src/index';

@@ -21,10 +21,10 @@
     "format:check": "prettier --check apps packages scripts tests README.md docs package.json tsconfig.json pnpm-workspace.yaml",
     "agent:deepseek": "pnpm --filter @voxel/agent deepseek",
     "test:agent:deepseek": "pnpm --filter @voxel/server test:agent:deepseek",
-    "test:agents": "pnpm --filter @voxel/server exec tsx src/agent-management-integration.ts",
-    "test:chat": "pnpm --filter @voxel/server exec tsx src/chat-integration.ts",
-    "test:agent:voice": "pnpm --filter @voxel/server exec tsx src/agent-speech-integration.ts",
-    "test:agent:tasks": "pnpm --filter @voxel/server exec tsx src/agent-task-integration.ts"
+    "test:agents": "pnpm --filter @voxel/server exec tsx test/integration/agent-management.ts",
+    "test:chat": "pnpm --filter @voxel/server exec tsx test/integration/chat.ts",
+    "test:agent:voice": "pnpm --filter @voxel/server exec tsx test/integration/agent-speech.ts",
+    "test:agent:tasks": "pnpm --filter @voxel/server exec tsx test/integration/agent-tasks.ts"
   },
   "devDependencies": {
     "@types/node": "^22.18.0",

@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import {
   REALTIME_LIMITS,
   type RealtimeEvent,
-} from '../../../packages/shared/src/realtime';
+} from '../../../../packages/shared/src/realtime';
 import { inBounds, type Edit } from '@voxel/shared';
 
 export interface RealtimeSocket {
