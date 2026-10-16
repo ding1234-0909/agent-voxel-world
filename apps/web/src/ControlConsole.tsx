@@ -7,6 +7,7 @@ import {
 } from 'react';
 import type {
   AgentSettings,
+  AgentTaskStatus,
   ManagedAgentView,
   ProviderType,
   ProviderView,
@@ -59,6 +60,16 @@ const statusNames: Record<ManagedAgentView['status'], string> = {
   completed: '任务已结束',
   failed: '任务异常',
 };
+const taskStatusNames: Record<AgentTaskStatus, string> = {
+  running: '执行任务',
+  waiting: '等待环境变化',
+  needs_input: '等待你的答复',
+  blocked: '任务受阻',
+  paused: '已暂停',
+  completed: '已完成',
+  cancelled: '已取消',
+  budget: '达到保护上限',
+};
 const isActive = (job: ManagedAgentView) =>
   ['joining', 'running', 'stopping'].includes(job.status);
 const initialAgent: AgentSettings = {
@@ -70,7 +81,9 @@ const initialAgent: AgentSettings = {
   intervalMode: 'fixed',
   intervalMinMs: 4000,
   intervalMaxMs: 8000,
-  maxTurns: 20,
+  maxTurns: 100,
+  tokenBudget: 50000,
+  taskTimeoutMs: 900000,
   intervalMs: 3000,
   timeoutMs: 60000,
   maxTokens: 512,
@@ -110,6 +123,8 @@ export function ControlConsole({
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [pollError, setPollError] = useState('');
+  const [taskEditor, setTaskEditor] = useState<string>();
+  const [taskGoal, setTaskGoal] = useState('');
   const modelRequest = useRef<AbortController | null>(null);
   const selected = providers.find((p) => p.id === agent.providerId);
   const editingProvider = providers.find((p) => p.id === editing);
@@ -123,7 +138,7 @@ export function ControlConsole({
     setEditingAgent(job?.id);
     setAgent(
       job
-        ? { ...job }
+        ? { ...job, goal: job.task?.goal ?? job.goal }
         : {
             ...initialAgent,
             providerId: providers[0]?.id ?? '',
@@ -303,8 +318,17 @@ export function ControlConsole({
           >
             Agent 玩家{' '}
             <small>
-              {jobs.filter(isActive).length} 运行中 ·{' '}
-              {jobs.filter((j) => j.status === 'idle').length} 待命
+              {
+                jobs.filter((j) => isActive(j) || j.task?.status === 'running')
+                  .length
+              }{' '}
+              运行中 ·{' '}
+              {
+                jobs.filter(
+                  (j) => j.status === 'idle' && j.task?.status !== 'running',
+                ).length
+              }{' '}
+              待命
             </small>
           </button>
           <button
@@ -550,11 +574,6 @@ export function ControlConsole({
                       editingAgent ? 'PUT' : 'POST',
                       {
                         ...agent,
-                        maxTurns: editingAgent
-                          ? agent.maxTurns
-                          : agent.continuous
-                            ? 20
-                            : agent.maxTurns,
                         intervalMs:
                           editingAgent || agent.intervalMode === 'fixed'
                             ? agent.intervalMs
@@ -574,7 +593,7 @@ export function ControlConsole({
                     setShowAgentForm(false);
                     setNotice(
                       editingAgent
-                        ? '参数已保存。下次继续运行或被 @ 唤醒时使用新参数。'
+                        ? '参数已保存。任务修改后请点击继续任务；普通消息只处理一次。'
                         : 'Agent 已开始加入世界。关闭面板后仍会继续运行。',
                     );
                   });
@@ -584,7 +603,7 @@ export function ControlConsole({
                 {editingAgent && (
                   <p className="agent-hint">
                     保存不会启动任务，角色与位置保留。运行中的 Agent
-                    需等待待命或关闭后再修改。
+                    请先暂停任务再修改。
                   </p>
                 )}
                 <fieldset disabled={busy}>
@@ -659,57 +678,15 @@ export function ControlConsole({
                         setAgent({ ...agent, goal: e.target.value })
                       }
                     />
+                    <small className="agent-hint">
+                      填写希望 Agent
+                      完成的目标；具体方案和执行情况会显示在卡片的“最近执行进展”中。
+                    </small>
                   </label>
                   <h4 className="agent-section-title">运行安排</h4>
-                  <div className="agent-grid">
-                    <label>
-                      运行方式
-                      <select
-                        value={agent.continuous ? 'continuous' : 'limited'}
-                        onChange={(e) =>
-                          setAgent({
-                            ...agent,
-                            continuous: e.target.value === 'continuous',
-                            maxTurns:
-                              Number.isInteger(agent.maxTurns) &&
-                              agent.maxTurns >= 1 &&
-                              agent.maxTurns <= 200
-                                ? agent.maxTurns
-                                : 20,
-                          })
-                        }
-                      >
-                        <option value="limited">限定轮数</option>
-                        <option value="continuous">持续运行（永久）</option>
-                      </select>
-                    </label>
-                    {!agent.continuous && (
-                      <label>
-                        运行轮数
-                        <input
-                          type="number"
-                          min={1}
-                          max={200}
-                          required
-                          value={
-                            Number.isNaN(agent.maxTurns) ? '' : agent.maxTurns
-                          }
-                          onChange={(e) =>
-                            setAgent({
-                              ...agent,
-                              maxTurns: e.target.valueAsNumber,
-                            })
-                          }
-                        />
-                      </label>
-                    )}
-                  </div>
-                  {agent.continuous && (
-                    <p className="agent-hint">
-                      持续运行，直到手动关闭或发生终止错误。服务重启后恢复待命，可通过聊天
-                      @ 或点击继续运行唤醒。
-                    </p>
-                  )}
+                  <p className="agent-hint">
+                    任务按实际进展继续，完成、受阻或需要确认时自动停下；达到保护预算也会暂停。普通聊天只回复一次。
+                  </p>
                   <label>
                     轮询方式
                     <select
@@ -728,7 +705,7 @@ export function ControlConsole({
                   </label>
                   {agent.intervalMode === 'fixed' ? (
                     <label>
-                      轮次间隔（毫秒）
+                      唤醒间隔（毫秒）
                       <input
                         type="number"
                         min={1000}
@@ -790,10 +767,64 @@ export function ControlConsole({
                     </div>
                   )}
                   <p className="agent-hint">
-                    每轮结束后再等待所选间隔。随机模式每轮重新抽取区间内的等待时间，不会同时发起多个推理请求。
+                    每次间隔只推进一次决策。等待期间先在本地检查环境，空闲或条件未变时不调用模型。新消息及时唤醒，同一
+                    Agent 不并发推理。
                   </p>
                   <details>
-                    <summary>高级参数 · 推理与输出</summary>
+                    <summary>高级参数 · 预算保护与推理</summary>
+                    <p className="agent-hint">
+                      以下为异常保护上限，不是要求执行的轮数。达到上限会暂停，手动继续才会开启新的预算额度。
+                    </p>
+                    <div className="agent-grid">
+                      <label>
+                        任务调用上限
+                        <input
+                          type="number"
+                          min={1}
+                          max={200}
+                          required
+                          value={agent.maxTurns}
+                          onChange={(e) =>
+                            setAgent({
+                              ...agent,
+                              maxTurns: e.target.valueAsNumber,
+                            })
+                          }
+                        />
+                      </label>
+                      <label>
+                        任务 token 预算
+                        <input
+                          type="number"
+                          min={1000}
+                          max={1000000}
+                          required
+                          value={agent.tokenBudget ?? 50000}
+                          onChange={(e) =>
+                            setAgent({
+                              ...agent,
+                              tokenBudget: e.target.valueAsNumber,
+                            })
+                          }
+                        />
+                      </label>
+                      <label>
+                        任务执行时间上限（分钟）
+                        <input
+                          type="number"
+                          min={1}
+                          max={120}
+                          required
+                          value={(agent.taskTimeoutMs ?? 900000) / 60000}
+                          onChange={(e) =>
+                            setAgent({
+                              ...agent,
+                              taskTimeoutMs: e.target.valueAsNumber * 60000,
+                            })
+                          }
+                        />
+                      </label>
+                    </div>
                     <div className="agent-grid">
                       <label>
                         请求超时（毫秒）
@@ -959,53 +990,52 @@ export function ControlConsole({
               )}
               <div className="agent-job-list">
                 {jobs.map((job) => (
-                  <article className="agent-job" key={job.id}>
+                  <article
+                    className="agent-job"
+                    key={job.id}
+                    data-task-status={job.task?.status}
+                  >
                     <div className="agent-job-title">
-                      <strong>{job.name}</strong>
+                      <div className="agent-identity">
+                        <span className="agent-avatar" aria-hidden="true">
+                          {job.name.slice(0, 1)}
+                        </span>
+                        <div>
+                          <strong>{job.name}</strong>
+                          <p className="agent-job-model">
+                            {job.providerName} · {job.model}
+                          </p>
+                        </div>
+                      </div>
                       <span
                         className={`agent-badge ${isActive(job) ? 'active' : ''}`}
                       >
-                        {statusNames[job.status]}
+                        {job.status === 'idle' && job.task
+                          ? taskStatusNames[job.task.status]
+                          : statusNames[job.status]}
                       </span>
                     </div>
-                    <p className="agent-job-model">
-                      {job.providerName} · {job.model}
+                    <p className="agent-job-goal">
+                      <span className="agent-detail-label">任务目标</span>
+                      {job.task?.goal ?? job.goal}
                     </p>
-                    <p className="agent-job-goal">{job.goal}</p>
-                    <div className="agent-job-meta">
-                      <span>
-                        {job.continuous ? '持续运行' : `${job.maxTurns} 轮`}
-                      </span>
-                      <span>
-                        {job.intervalMode === 'random'
-                          ? `随机 ${job.intervalMinMs}–${job.intervalMaxMs} ms`
-                          : `间隔 ${job.intervalMs} ms`}
-                      </span>
-                      <span>
-                        {job.allowEdits ? '允许建造' : '仅探索与交流'} ·{' '}
-                        {job.voiceReplies ? '语音回复开启' : '语音回复关闭'}
-                      </span>
-                    </div>
+                    {job.task && (
+                      <div className="agent-task-progress">
+                        <p>
+                          <span className="agent-detail-label">最近进展</span>
+                          {job.task.summary}
+                        </p>
+                        {job.task.reason &&
+                          job.task.reason !== job.task.summary && (
+                            <p className="agent-task-notice">
+                              <span aria-hidden="true">●</span>{' '}
+                              {job.task.reason}
+                            </p>
+                          )}
+                      </div>
+                    )}
                     <div className="agent-card-actions">
-                      <button
-                        disabled={
-                          busy || ['joining', 'stopping'].includes(job.status)
-                        }
-                        aria-pressed={!!job.voiceReplies}
-                        onClick={() =>
-                          void perform(async () => {
-                            await api(
-                              `/${encodeURIComponent(job.id)}/voice`,
-                              'POST',
-                              { enabled: !job.voiceReplies },
-                            );
-                            setJobs(await api<ManagedAgentView[]>(''));
-                          })
-                        }
-                      >
-                        {job.voiceReplies ? '关闭语音回复' : '开启语音回复'}
-                      </button>
-                      {!isActive(job) && (
+                      {!isActive(job) && job.task?.status !== 'running' && (
                         <button
                           className="primary"
                           disabled={busy}
@@ -1020,15 +1050,83 @@ export function ControlConsole({
                             })
                           }
                         >
-                          {job.sessionId ? '继续运行' : '重新加入并运行'}
+                          {job.task?.status === 'budget'
+                            ? '确认追加预算并继续'
+                            : job.sessionId
+                              ? ['completed', 'cancelled'].includes(
+                                  job.task?.status ?? '',
+                                )
+                                ? '重新执行任务'
+                                : '继续任务'
+                              : '重新加入并执行'}
                         </button>
                       )}
+                      {job.sessionId &&
+                        !['joining', 'stopping'].includes(job.status) && (
+                          <>
+                            {['running', 'waiting'].includes(
+                              job.task?.status ?? '',
+                            ) && (
+                              <button
+                                disabled={busy}
+                                onClick={() =>
+                                  void perform(async () => {
+                                    await api(
+                                      `/${encodeURIComponent(job.id)}/pause`,
+                                      'POST',
+                                      {},
+                                    );
+                                    setJobs(await api<ManagedAgentView[]>(''));
+                                  })
+                                }
+                              >
+                                暂停任务
+                              </button>
+                            )}
+                            {!['completed', 'cancelled'].includes(
+                              job.task?.status ?? '',
+                            ) && (
+                              <button
+                                disabled={busy}
+                                onClick={() =>
+                                  void perform(async () => {
+                                    await api(
+                                      `/${encodeURIComponent(job.id)}/cancel`,
+                                      'POST',
+                                      {},
+                                    );
+                                    setJobs(await api<ManagedAgentView[]>(''));
+                                  })
+                                }
+                              >
+                                取消任务
+                              </button>
+                            )}
+                          </>
+                        )}
                       <button
-                        disabled={busy || isActive(job)}
-                        title={isActive(job) ? '待命或关闭后可编辑' : undefined}
+                        disabled={
+                          busy || ['joining', 'stopping'].includes(job.status)
+                        }
+                        onClick={() => {
+                          setTaskEditor(
+                            taskEditor === job.id ? undefined : job.id,
+                          );
+                          setTaskGoal('');
+                        }}
+                      >
+                        布置新任务
+                      </button>
+                      <button
+                        disabled={
+                          busy ||
+                          isActive(job) ||
+                          job.task?.status === 'running'
+                        }
+                        title={isActive(job) ? '请先暂停任务再编辑' : undefined}
                         onClick={() => openAgentEditor(job)}
                       >
-                        编辑任务与参数
+                        编辑参数
                       </button>
                       {(isActive(job) ||
                         job.sessionId ||
@@ -1052,16 +1150,121 @@ export function ControlConsole({
                         </button>
                       )}
                     </div>
+                    {taskEditor === job.id && (
+                      <form
+                        className="agent-task-form"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          void perform(async () => {
+                            await api(
+                              `/${encodeURIComponent(job.id)}/task`,
+                              'POST',
+                              { goal: taskGoal },
+                            );
+                            setJobs(await api<ManagedAgentView[]>(''));
+                            setTaskEditor(undefined);
+                          });
+                        }}
+                      >
+                        <label>
+                          新任务
+                          <textarea
+                            required
+                            rows={3}
+                            maxLength={2000}
+                            value={taskGoal}
+                            onChange={(e) => setTaskGoal(e.target.value)}
+                            placeholder="例如：在东侧空地建一间木屋，门朝南"
+                          />
+                        </label>
+                        <p className="agent-hint">
+                          提交后替换当前任务；角色和已完成的建筑保留。
+                        </p>
+                        <div className="agent-card-actions">
+                          <button
+                            className="primary"
+                            disabled={busy || !taskGoal.trim()}
+                          >
+                            开始任务
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setTaskEditor(undefined)}
+                          >
+                            返回
+                          </button>
+                        </div>
+                      </form>
+                    )}
+                    <details className="agent-card-details">
+                      <summary>
+                        用量与配置{' '}
+                        <span>
+                          {job.task
+                            ? `${job.task.calls} / ${job.maxTurns} 次调用`
+                            : '查看详情'}
+                        </span>
+                      </summary>
+                      {job.task && (
+                        <p className="agent-hint">
+                          本额度 {job.task.calls} / {job.maxTurns} 次调用 ·{' '}
+                          {job.task.estimated ? '约 ' : ''}
+                          {job.task.tokens.toLocaleString()} tokens
+                        </p>
+                      )}
+                      {job.usage && (
+                        <p className="agent-hint">
+                          累计 {job.usage.calls} 次调用 ·{' '}
+                          {job.usage.estimated ? '约 ' : ''}
+                          {job.usage.tokens.toLocaleString()} tokens
+                        </p>
+                      )}
+                      <div className="agent-job-meta">
+                        <span>任务驱动</span>
+                        <span>
+                          {job.intervalMode === 'random'
+                            ? `随机 ${job.intervalMinMs}–${job.intervalMaxMs} ms`
+                            : `间隔 ${job.intervalMs} ms`}
+                        </span>
+                        <span>
+                          {job.allowEdits ? '允许建造' : '仅探索与交流'} ·{' '}
+                          {job.voiceReplies ? '语音回复开启' : '语音回复关闭'}
+                        </span>
+                      </div>
+                      <button
+                        disabled={
+                          busy || ['joining', 'stopping'].includes(job.status)
+                        }
+                        aria-pressed={!!job.voiceReplies}
+                        onClick={() =>
+                          void perform(async () => {
+                            await api(
+                              `/${encodeURIComponent(job.id)}/voice`,
+                              'POST',
+                              { enabled: !job.voiceReplies },
+                            );
+                            setJobs(await api<ManagedAgentView[]>(''));
+                          })
+                        }
+                      >
+                        {job.voiceReplies ? '关闭语音回复' : '开启语音回复'}
+                      </button>
+                    </details>
                     <details className="agent-run-log">
                       <summary>运行记录</summary>
+                      {job.lastResponse && (
+                        <p className="agent-hint">
+                          最近处理结果：{job.lastResponse}
+                        </p>
+                      )}
                       <pre>{job.logs.join('\n') || '暂无运行记录'}</pre>
                     </details>
                   </article>
                 ))}
               </div>
               <p className="agent-list-note">
-                关闭控制台不会停止
-                Agent。编辑任务与参数后，点击继续运行即可开始新任务。
+                关闭控制台不会停止 Agent。暂停或取消任务后角色仍在线；私聊和 @
+                可交流或安排任务。
               </p>
             </section>
           )}

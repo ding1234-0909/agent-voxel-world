@@ -49,7 +49,9 @@ function fakeSession(wait = Promise.resolve()) {
 }
 function setup(
   s: ReturnType<typeof fakeSession>,
-  decide = vi.fn(async () => ({ type: 'wait' as const })),
+  decide: ModelPlanner['decide'] = vi.fn(async () => ({
+    type: 'wait' as const,
+  })),
 ) {
   manager = new AgentManager(store, 'ws://fixture', {
     session: () => s as unknown as Session,
@@ -221,4 +223,213 @@ it('human mentions wake an idle agent once and queue during inference without co
   await vi.waitFor(() => expect(m.list()[0].status).toBe('stopped'));
   s.onEvent!(mention(4));
   expect(decide).toHaveBeenCalledTimes(3);
+});
+
+it('pause, resume and cancel keep identity and retain task progress across restart', async () => {
+  const s = fakeSession();
+  const decide = vi.fn(async () => ({
+    type: 'wait' as const,
+    task: {
+      intent: 'continue' as const,
+      status: 'running' as const,
+      summary: '地基已规划',
+    },
+  }));
+  const m = setup(s, decide),
+    job = m.create({ ...settings, maxTurns: 30, intervalMs: 60000 });
+  await vi.waitFor(() => expect(m.list()[0].status).toBe('idle'));
+  await m.controlTask(job.id, 'pause');
+  expect(m.list()[0]).toMatchObject({
+    sessionId: 'player-1',
+    task: { status: 'paused', summary: '地基已规划', calls: 1 },
+    usage: { calls: 1 },
+  });
+  m.resume(job.id);
+  await vi.waitFor(() => expect(decide).toHaveBeenCalledTimes(2));
+  await vi.waitFor(() => expect(m.list()[0].status).toBe('idle'));
+  await m.controlTask(job.id, 'pause');
+  await m.close();
+  const restored = setup(s, decide);
+  await restored.load();
+  expect(decide).toHaveBeenCalledTimes(2);
+  expect(restored.list()[0]).toMatchObject({
+    task: { status: 'paused', summary: '地基已规划', calls: 2 },
+    usage: { calls: 2 },
+  });
+  await restored.controlTask(job.id, 'cancel');
+  expect(restored.list()[0]).toMatchObject({
+    sessionId: 'player-1',
+    task: { status: 'cancelled' },
+  });
+});
+
+it('pausing pending inference drops late edits and does not close the character', async () => {
+  const s = fakeSession();
+  let release!: () => void;
+  const decide = vi.fn(async () => {
+    await new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return {
+      type: 'edit' as const,
+      x: 2,
+      y: 3,
+      z: 1,
+      material: 'wood' as const,
+    };
+  });
+  const m = setup(s, decide),
+    job = m.create({ ...settings, maxTurns: 30, allowEdits: true });
+  await vi.waitFor(() => expect(decide).toHaveBeenCalledTimes(1));
+  const paused = m.controlTask(job.id, 'pause');
+  release();
+  await paused;
+  expect(s.request.mock.calls.some((c) => (c as unknown[])[0] === 'edit')).toBe(
+    false,
+  );
+  expect(s.close).not.toHaveBeenCalled();
+  expect(m.list()[0].task?.status).toBe('paused');
+});
+
+it('expired private task audiences cannot be resumed after server restart', async () => {
+  const s = fakeSession(),
+    decide = vi.fn(async () => ({ type: 'wait' as const }));
+  const m = setup(s, decide),
+    job = m.create(settings);
+  await vi.waitFor(() => expect(m.list()[0].status).toBe('idle'));
+  decide.mockResolvedValueOnce({
+    type: 'wait',
+    task: {
+      intent: 'task',
+      status: 'waiting',
+      waitFor: 'world',
+      goal: 'private goal',
+      summary: 'waiting',
+    },
+  } as any);
+  s.onEvent!({
+    seq: 1,
+    at: Date.now(),
+    type: 'chat',
+    actor: 'private-person',
+    actorKind: 'human',
+    data: {
+      scope: 'private',
+      recipients: ['player-1'],
+      kind: 'text',
+      text: 'secret task',
+      name: 'Person',
+    },
+  });
+  await vi.waitFor(() =>
+    expect(m.list()[0].task?.privateTo).toBe('private-person'),
+  );
+  await vi.waitFor(() => expect(m.list()[0].status).toBe('idle'));
+  await m.close();
+  const restored = setup(s, decide);
+  await restored.load();
+  expect(restored.list()[0].task?.status).toBe('needs_input');
+  expect(() => restored.resume(job.id)).toThrow('私聊会话已失效');
+  expect(decide).toHaveBeenCalledTimes(2);
+});
+
+it('keeps the current chat-assigned goal consistent through editing, persistence and rerunning', async () => {
+  const s = fakeSession();
+  const decide = vi.fn<ModelPlanner['decide']>(async () => ({ type: 'wait' }));
+  const m = setup(s, decide),
+    job = m.create(settings);
+  await vi.waitFor(() => expect(m.list()[0].status).toBe('idle'));
+  decide.mockResolvedValueOnce({
+    type: 'wait',
+    task: {
+      intent: 'task',
+      status: 'completed',
+      goal: 'Build a new house',
+      summary: 'House verified',
+    },
+  });
+  s.onEvent!({
+    seq: 1,
+    at: Date.now(),
+    type: 'chat',
+    actor: 'person',
+    actorKind: 'human',
+    data: {
+      scope: 'public',
+      recipients: ['player-1'],
+      kind: 'text',
+      text: 'Build a new house',
+      name: 'Person',
+    },
+  });
+  await vi.waitFor(() =>
+    expect(m.list()[0].task?.goal).toBe('Build a new house'),
+  );
+  await vi.waitFor(() => expect(m.list()[0].status).toBe('idle'));
+  const before = m.list()[0];
+  expect(before.goal).toBe(before.task?.goal);
+  const updated = await m.update(job.id, {
+    goal: before.goal,
+    maxTokens: 1024,
+  });
+  expect(updated.task).toEqual(before.task);
+  const partial = await m.update(job.id, { maxTokens: 2048 });
+  expect(partial.goal).toBe('Build a new house');
+  expect(partial.task).toEqual(before.task);
+  await m.close();
+  const restored = setup(s, decide);
+  await restored.load();
+  expect(restored.list()[0].goal).toBe('Build a new house');
+  restored.resume(job.id);
+  await vi.waitFor(() => expect(decide).toHaveBeenCalledTimes(3));
+  expect(decide.mock.calls[2][1]).toMatchObject({
+    task: { goal: 'Build a new house' },
+  });
+  await vi.waitFor(() => expect(restored.list()[0].status).toBe('idle'));
+  const changed = await restored.update(job.id, { goal: 'Plant a garden' });
+  expect(changed).toMatchObject({
+    goal: 'Plant a garden',
+    task: { goal: 'Plant a garden', status: 'paused', calls: 0 },
+  });
+});
+
+it('an online agent with a failed task still accepts a new human mention without automatic retries', async () => {
+  const s = fakeSession();
+  const decide = vi
+    .fn<ModelPlanner['decide']>()
+    .mockRejectedValueOnce(new DeepSeekError('fixture failure', true));
+  const m = setup(s, decide),
+    job = m.create({ ...settings, maxTurns: 30 });
+  await vi.waitFor(() => expect(m.list()[0].status).toBe('failed'));
+  expect(decide).toHaveBeenCalledTimes(1);
+  decide.mockResolvedValueOnce({
+    type: 'chat',
+    text: '我还在，任务已暂停。',
+    task: { intent: 'reply', status: 'completed', summary: '已回复' },
+  });
+  s.onEvent!({
+    seq: 1,
+    at: Date.now(),
+    type: 'chat',
+    actor: 'human',
+    actorKind: 'human',
+    data: {
+      scope: 'public',
+      recipients: ['player-1'],
+      kind: 'text',
+      text: '还在吗',
+      name: 'Person',
+    },
+  });
+  await vi.waitFor(() => expect(m.list()[0].status).toBe('idle'));
+  expect(decide).toHaveBeenCalledTimes(2);
+  expect(m.list()[0]).toMatchObject({
+    id: job.id,
+    sessionId: 'player-1',
+    task: { status: 'blocked', calls: 1 },
+  });
+  expect(s.join).toHaveBeenCalledTimes(1);
+  expect(s.request).toHaveBeenCalledWith('chat', {
+    text: '我还在，任务已暂停。',
+  });
 });

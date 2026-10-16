@@ -21,7 +21,7 @@ it('wakes a long interval promptly, deduplicates, and only accepts addressed hum
   const wait = inbox.wait(60000, abort.signal);
   expect(inbox.push(message(1, 'public', []), 'ai')).toBe(false);
   expect(inbox.push(message(2, 'private', ['other']), 'ai')).toBe(false);
-  expect(inbox.push(message(3, 'nearby'), 'ai')).toBe(false);
+  expect(inbox.push(message(3, 'nearby', ['other']), 'ai')).toBe(false);
   expect(inbox.push(message(4), 'ai')).toBe(true);
   await wait;
   expect(inbox.push(message(4), 'ai')).toBe(false);

@@ -60,3 +60,13 @@ Agent 专用动作 `agent.voice: {enabled:boolean}` 设置 Avatar 的 `voiceRepl
 Agent 的 public/private 文字聊天触发服务端本机 TTS；文字事件照常即时投递。合成后仅授权听者收到 `agent.speech: {id,actor,text,scope,durationMs,expiresAt}`，使用当前会话凭证 GET `/chat/agent-speech/:id` 获取 WAV。听者必须在发言和合成完成时都开启收听、在线且 spatialMix.gain >= 0.03；private 还必须在原接收者列表。下载时再次核验身份、双方状态和可听范围；失效/越权返回 404。音频不放入观察历史，防止 Agent 互相重复消费自己的朗读。
 
 关闭 Agent 语音、离开或断线撤销其排队合成与缓存；合成失败仅向该 Agent 发 `agent.speech.error: {message}`，不会撤销文字。音频缓存最长 120 秒、24 段 / 32 MiB，合成串行，等待队列最多 8 段且每角色最多 2 段，排队超过 30 秒跳过。`GET /voice/capabilities` 中 `agentSpeech: {available,reason}` 表示本机合成可用性。
+
+## 托管 Agent 任务调度
+
+每次唤醒最多一次模型调用；普通消息与任务推进独立。`POST /agents/:id/task {goal}` 替换并启动任务；`/pause`、`/cancel` 中断当前推理/动作但保留角色；`/resume` 手动继续；`/stop` 关闭角色。保持既有 Origin + JSON 校验。
+
+`ManagedAgentView.task` 返回 goal、status、summary、reason、calls、tokens、estimated、elapsedMs；状态为 running/waiting/needs_input/blocked/paused/completed/cancelled/budget。`usage` 为跨任务累计用量，`lastResponse` 为最近消息处理摘要。`maxTurns` 改作调用上限，`tokenBudget` 和 `taskTimeoutMs` 提供额外保护；`continuous` 为兼容字段，无无限循环语义。
+
+模型可返回平铺动作加 `task`，或 `{action, task}` 包装，两种都经过同一权限与参数校验。`task` 决策：intent 为 reply/task/update/continue/pause/resume/cancel；status 为 running/waiting/needs_input/blocked/completed；summary 最多 500 字；新任务 goal 最多 2000 字；waiting 必须指明 waitFor=world/players。动作仍由原校验器检查。缺少决策的旧模型响应采用保守兼容：消息只回复一次，自动任务中的 chat/wait 结束本次任务，其他动作仍受预算保护。
+
+私聊任务保存原接收会话，后续自动汇报强制私聊；其他消息不覆盖其任务上下文。服务重启不复用旧私聊身份，需重新布置。任务的私聊上下文仅在受 Origin 限制的本机控制台可查看。

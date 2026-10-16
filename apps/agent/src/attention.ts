@@ -19,7 +19,7 @@ export class AgentAttention {
       return false;
     const data = event.data as ChatData;
     if (
-      !['public', 'private'].includes(data.scope) ||
+      !['public', 'private', 'nearby'].includes(data.scope) ||
       !data.recipients.includes(self)
     )
       return false;

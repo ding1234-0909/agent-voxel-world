@@ -23,7 +23,8 @@
     "test:agent:deepseek": "pnpm --filter @voxel/server test:agent:deepseek",
     "test:agents": "pnpm --filter @voxel/server exec tsx src/agent-management-integration.ts",
     "test:chat": "pnpm --filter @voxel/server exec tsx src/chat-integration.ts",
-    "test:agent:voice": "pnpm --filter @voxel/server exec tsx src/agent-speech-integration.ts"
+    "test:agent:voice": "pnpm --filter @voxel/server exec tsx src/agent-speech-integration.ts",
+    "test:agent:tasks": "pnpm --filter @voxel/server exec tsx src/agent-task-integration.ts"
   },
   "devDependencies": {
     "@types/node": "^22.18.0",

@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import {
   agentConfig,
   parseAction,
+  parseDecision,
   DeepSeekPlanner,
   DeepSeekError,
   executeAction,
@@ -44,7 +45,7 @@ describe('DeepSeek agent boundary', () => {
     expect(() => agentConfig({})).toThrow('DEEPSEEK_API_KEY');
     expect(config()).toMatchObject({
       model: 'deepseek-flash',
-      maxTurns: 20,
+      maxTurns: 100,
       allowEdits: false,
     });
     for (const env of [
@@ -233,7 +234,11 @@ describe('AI action execution', () => {
   });
   it('caps model calls and supplies action results to the next decision', async () => {
     const s = session(),
-      decide = vi.fn().mockResolvedValue({ type: 'chat', text: '你好' });
+      decide = vi.fn().mockResolvedValue({
+        type: 'chat',
+        text: '你好',
+        task: { intent: 'continue', status: 'running', summary: '进行中' },
+      });
     await runAgent(
       s as unknown as Session,
       { decide },
@@ -243,8 +248,10 @@ describe('AI action execution', () => {
     );
     expect(decide).toHaveBeenCalledTimes(2);
     expect(decide.mock.calls[1][1]).toMatchObject({
-      action: { type: 'chat' },
-      result: { ok: false, error: 'conflict' },
+      previous: {
+        action: { type: 'chat' },
+        result: { ok: false, error: 'conflict' },
+      },
     });
   });
   it('stops after three provider failures without performing any actions', async () => {
@@ -317,28 +324,39 @@ describe('continuous and randomized scheduling', () => {
       ),
     ).toBe(3000);
   });
-  it('continues past the finite turn limit and stops only on cancellation', async () => {
-    const abort = new AbortController();
-    let turns = 0;
-    const decide = vi.fn(async () => {
-      if (++turns === 202) abort.abort();
-      return { type: 'wait' as const };
-    });
+  it('legacy continuous flag cannot bypass the task budget', async () => {
+    const decide = vi.fn(async () => ({
+      type: 'wait' as const,
+      task: {
+        intent: 'continue' as const,
+        status: 'running' as const,
+        summary: 'Next step',
+      },
+    }));
     await runAgent(
       { observe: async () => observation, move: vi.fn(), request: vi.fn() },
       { decide },
       { ...config(), continuous: true, maxTurns: 1 },
-      abort.signal,
+      signal(),
       () => {},
     );
-    expect(decide).toHaveBeenCalledTimes(202);
+    expect(decide).toHaveBeenCalledTimes(1);
   });
   it('draws a fresh interval only between turns', async () => {
     const random = vi.spyOn(Math, 'random').mockReturnValue(0.5);
     try {
       await runAgent(
         { observe: async () => observation, move: vi.fn(), request: vi.fn() },
-        { decide: async () => ({ type: 'wait' }) },
+        {
+          decide: async () => ({
+            type: 'wait',
+            task: {
+              intent: 'continue',
+              status: 'running',
+              summary: 'Next step',
+            },
+          }),
+        },
         {
           ...config(),
           maxTurns: 3,
@@ -356,7 +374,14 @@ describe('continuous and randomized scheduling', () => {
   });
   it('interrupts a long randomized wait without starting another inference', async () => {
     const abort = new AbortController(),
-      decide = vi.fn(async () => ({ type: 'wait' as const }));
+      decide = vi.fn(async () => ({
+        type: 'wait' as const,
+        task: {
+          intent: 'continue' as const,
+          status: 'running' as const,
+          summary: 'Next step',
+        },
+      }));
     let timer: ReturnType<typeof setTimeout> | undefined;
     const started = Date.now();
     try {
@@ -394,5 +419,73 @@ describe('continuous and randomized scheduling', () => {
       ),
     ).rejects.toThrow('已停止');
     expect(decide).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('task decision output formats', () => {
+  it('accepts the real DeepSeek action/task envelope and preserves private routing', async () => {
+    const value = {
+      task: {
+        intent: 'reply',
+        status: 'completed',
+        summary: 'Answered greeting privately.',
+      },
+      action: {
+        type: 'chat',
+        text: '你好！',
+        scope: 'private',
+        recipients: ['human'],
+      },
+    };
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(response(JSON.stringify(value)));
+    expect(
+      await new DeepSeekPlanner(config(), request).decide(
+        observation,
+        null,
+        signal(),
+      ),
+    ).toMatchObject({
+      type: 'chat',
+      text: '你好！',
+      scope: 'private',
+      recipients: ['human'],
+      task: { intent: 'reply' },
+    });
+  });
+  it('envelope parsing does not bypass action permissions or task validation', () => {
+    expect(() =>
+      parseDecision(
+        {
+          action: { type: 'edit', x: 1, y: 3, z: 1, material: 'wood' },
+          task: {
+            intent: 'task',
+            status: 'running',
+            summary: 'build',
+            goal: 'house',
+          },
+        },
+        false,
+      ),
+    ).toThrow('权限');
+    expect(() =>
+      parseDecision(
+        {
+          action: { type: 'shell' },
+          task: { intent: 'reply', status: 'completed', summary: 'x' },
+        },
+        true,
+      ),
+    ).toThrow();
+    expect(() =>
+      parseDecision(
+        {
+          action: { type: 'wait' },
+          task: { intent: 'unknown', status: 'running', summary: 'x' },
+        },
+        true,
+      ),
+    ).toThrow();
   });
 });

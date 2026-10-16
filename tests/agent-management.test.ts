@@ -92,7 +92,7 @@ describe('provider configuration boundary', () => {
     const p = provider();
     const input = { name: 'AI', goal: 'Observe' };
     expect(validateAgent(input, p)).toMatchObject({
-      maxTurns: 20,
+      maxTurns: 100,
       allowEdits: false,
       model: 'deepseek-flash',
     });
@@ -199,7 +199,7 @@ describe('managed scheduling validation', () => {
     expect(validateAgent(base, provider())).toMatchObject({
       continuous: false,
       intervalMode: 'fixed',
-      maxTurns: 20,
+      maxTurns: 100,
     });
     expect(
       validateAgent(

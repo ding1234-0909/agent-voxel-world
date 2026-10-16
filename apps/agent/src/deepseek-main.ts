@@ -22,7 +22,7 @@ process.once('SIGTERM', stop);
 try {
   const config = agentConfig();
   console.log(
-    `DeepSeek AI 玩家 · ${config.model} · ${config.continuous ? '持续运行' : `最多 ${config.maxTurns} 轮`} · 方块修改${config.allowEdits ? '开启' : '关闭'}`,
+    `DeepSeek AI 玩家 · ${config.model} · 任务驱动 · 保护上限 ${config.maxTurns} 次调用 · 方块修改${config.allowEdits ? '开启' : '关闭'}`,
   );
   console.log(
     '附近方块、玩家昵称、聊天事件及 Agent 目标将发送至 DeepSeek API。Ctrl+C 退出。',

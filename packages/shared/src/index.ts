@@ -4,6 +4,9 @@ export type {
   ProviderType,
   ProviderView,
   AgentSettings,
+  AgentTask,
+  AgentTaskStatus,
+  AgentUsage,
   ManagedAgentView,
 } from './agents';
 export const PROTOCOL_VERSION = 1;

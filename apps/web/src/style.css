@@ -983,6 +983,13 @@ footer {
   max-height: 100px;
   overflow: auto;
 }
+.agent-detail-label {
+  display: block;
+  margin-bottom: 4px;
+  color: #6a7e70;
+  font-size: 12px;
+  font-weight: 500;
+}
 .agent-job-meta {
   display: flex;
   flex-wrap: wrap;
@@ -1985,4 +1992,175 @@ footer {
 .audio-player button:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+.agent-task-progress {
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.48);
+  border-radius: 10px;
+  border-left: 3px solid #799885;
+  margin: 14px 0;
+}
+.agent-task-progress small {
+  display: block;
+  margin-top: 8px;
+}
+.agent-task-form {
+  border-top: 1px solid #d4dfd0;
+  padding-top: 16px;
+  margin-top: 16px;
+}
+.agent-task-form label {
+  display: grid;
+  gap: 8px;
+}
+.agent-task-form textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #bdccbd;
+  border-radius: 8px;
+  font: inherit;
+  color: inherit;
+  resize: vertical;
+}
+
+/* Agent cards keep the task and next action visible; diagnostics expand below. */
+.agent-job-list .agent-job {
+  padding: 22px;
+  border-radius: 14px;
+  background: #fffef9;
+  box-shadow: 0 3px 12px #263e3205;
+}
+.agent-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.agent-avatar {
+  display: grid;
+  place-items: center;
+  flex: 0 0 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: #e7eee3;
+  color: #3e6151;
+  font-size: 18px;
+  font-weight: 600;
+}
+.agent-identity .agent-job-model {
+  margin: 5px 0 0;
+  font-size: 11px;
+  font-weight: 400;
+}
+.agent-job-list .agent-job-goal {
+  margin: 22px 0 16px;
+  font-size: 16px;
+  line-height: 1.6;
+  font-weight: 500;
+  max-height: 140px;
+}
+.agent-job-goal .agent-detail-label {
+  margin-bottom: 6px;
+  font-size: 11px;
+  font-weight: 400;
+}
+.agent-job .agent-task-progress {
+  margin: 0 0 20px;
+  padding: 14px 16px;
+  border: 1px solid #e6ebe1;
+  background: #f4f6ef;
+  border-radius: 10px;
+}
+.agent-task-progress p {
+  margin: 0;
+  line-height: 1.7;
+}
+.agent-task-progress .agent-detail-label {
+  font-size: 11px;
+  font-weight: 400;
+}
+.agent-task-progress .agent-task-notice {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #e0e6d9;
+  color: #6f785e;
+  font-size: 11px;
+}
+.agent-task-notice > span {
+  font-size: 8px;
+  padding-top: 3px;
+}
+.agent-job[data-task-status='blocked'] .agent-badge,
+.agent-job[data-task-status='budget'] .agent-badge,
+.agent-job[data-task-status='needs_input'] .agent-badge {
+  background: #f5ead3;
+  color: #8a622b;
+}
+.agent-job[data-task-status='blocked'] .agent-task-notice,
+.agent-job[data-task-status='budget'] .agent-task-notice,
+.agent-job[data-task-status='needs_input'] .agent-task-notice {
+  color: #926c35;
+}
+.agent-job > .agent-card-actions {
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.agent-job > .agent-card-actions button {
+  padding: 9px 12px;
+  border-radius: 7px;
+  background: transparent;
+  border: 1px solid #dfe6d8;
+}
+.agent-job > .agent-card-actions button.primary {
+  background: #314f42;
+  border-color: #314f42;
+}
+.agent-job > .agent-card-actions button:hover {
+  background: #e8eee2;
+}
+.agent-job > .agent-card-actions button.primary:hover {
+  background: #254033;
+}
+.agent-job > .agent-card-actions .agent-close-action {
+  border-color: transparent;
+  font-size: 11px;
+}
+.agent-job .agent-card-details,
+.agent-job .agent-run-log {
+  margin: 0;
+  padding: 12px 0;
+  border-top: 1px solid #e8ecdf;
+}
+.agent-job .agent-run-log {
+  padding-bottom: 0;
+}
+.agent-job details summary {
+  margin: 0;
+  font-size: 11px;
+}
+.agent-card-details summary > span {
+  float: right;
+  color: #84907e;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.agent-job details[open] summary {
+  margin-bottom: 12px;
+}
+.agent-card-details .agent-job-meta {
+  margin: 10px 0;
+}
+@media (max-width: 600px) {
+  .agent-job-list .agent-job {
+    padding: 16px;
+  }
+  .agent-job-title {
+    align-items: flex-start;
+  }
+  .agent-job > .agent-card-actions .agent-close-action {
+    margin-left: 0;
+  }
 }

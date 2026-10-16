@@ -80,6 +80,19 @@ export function installAgentRoutes(app: Express, manager: AgentManager) {
     '/agents',
     route((req, res) => res.status(201).json(manager.create(req.body))),
   );
+  for (const operation of ['pause', 'cancel'] as const)
+    app.post(
+      `/agents/:id/${operation}`,
+      route(async (req, res) =>
+        res.json(await manager.controlTask(String(req.params.id), operation)),
+      ),
+    );
+  app.post(
+    '/agents/:id/task',
+    route(async (req, res) =>
+      res.json(await manager.assignTask(String(req.params.id), req.body)),
+    ),
+  );
   app.post(
     '/agents/:id/voice',
     route(async (req, res) =>

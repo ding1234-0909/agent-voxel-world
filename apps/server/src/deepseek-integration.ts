@@ -58,7 +58,16 @@ try {
         choices: [
           {
             finish_reason: 'stop',
-            message: { content: JSON.stringify(actions.shift()) },
+            message: {
+              content: JSON.stringify({
+                ...actions.shift(),
+                task: {
+                  intent: 'continue',
+                  status: 'running',
+                  summary: '继续测试任务',
+                },
+              }),
+            },
           },
         ],
       }),

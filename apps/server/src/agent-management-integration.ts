@@ -258,11 +258,9 @@ try {
   }
   await until(() => room.state.players.size === 4);
   await until(() =>
-    created.every((id) =>
-      manager!
-        .list()
-        .find((j) => j.id === id)
-        ?.logs.some((s) => s.includes('持续运行')),
+    created.every(
+      (id) =>
+        manager!.list().find((j) => j.id === id)?.task?.status === 'completed',
     ),
   );
   assert([...room.state.players.values()].every((p) => p.kind === 'ai-agent'));
@@ -272,7 +270,7 @@ try {
   const beforeWake = calls;
   assert.equal(
     (await api(`/${created[0]}`, 'PUT', { maxTurns: 9 })).status,
-    409,
+    200,
   );
   await speaker.request('chat', {
     text: 'Wake now',
@@ -311,10 +309,8 @@ try {
       .every((j) => j.continuous && j.intervalMode === 'random'),
   );
   assert(
-    manager
-      .list()
-      .find((j) => j.id === created[0])
-      ?.logs.some((s) => s.includes('持续运行')),
+    manager.list().find((j) => j.id === created[0])?.task?.status ===
+      'completed',
   );
   await manager.close();
   await until(() => room.state.players.size === 0);
@@ -339,8 +335,7 @@ try {
   manager.resume(stopped.id);
   assert.throws(() => manager!.resume(stopped.id), /正在运行/);
   await until(
-    () =>
-      manager!.list().find((j) => j.id === stopped.id)?.status === 'running',
+    () => manager!.list().find((j) => j.id === stopped.id)?.status === 'idle',
   );
   assert.equal(room.state.players.size, 4);
   assert.throws(
@@ -351,7 +346,7 @@ try {
   for (const j of manager.list().filter((j) => j.sessionId)) manager.stop(j.id);
   await until(() => room.state.players.size === 0);
   console.log(
-    'PASS: origin guard, credential redaction, round completion stays online, reuse preserves player identity/position, task replacement, idle spends no inference, close/rejoin, online capacity and restart restoration without inference. Model responses are fixtures.',
+    'PASS: origin guard, credential redaction, task completion stays online, reuse preserves player identity/position, task replacement, idle spends no inference, close/rejoin, online capacity and restart restoration without inference. Model responses are fixtures.',
   );
 } finally {
   await speaker?.close();

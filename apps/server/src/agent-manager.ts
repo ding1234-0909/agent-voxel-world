@@ -3,17 +3,19 @@ import { mkdir, readFile, writeFile, rename, unlink } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type {
+  ChatData,
   AgentSettings,
   ManagedAgentView,
   ProviderView,
 } from '@voxel/shared';
 import { Session } from '../../agent/src/session';
+import { runTaskStep, newTask } from '../../agent/src/task-runtime';
 import { AgentAttention } from '../../agent/src/attention';
 import {
   ModelPlanner,
   DeepSeekError,
   listModels,
-  runAgent,
+  nextIntervalMs,
   type AgentConfig,
   type AgentRunState,
 } from '../../agent/src/deepseek';
@@ -178,7 +180,21 @@ export function validateAgent(
     goal,
     thinking,
     reasoningEffort: reasoningEffort as AgentSettings['reasoningEffort'],
-    maxTurns: integer(input.maxTurns, '轮数', 20, 1, 200),
+    maxTurns: integer(input.maxTurns, '任务调用上限', 100, 1, 200),
+    tokenBudget: integer(
+      input.tokenBudget,
+      '任务 token 预算',
+      50000,
+      1000,
+      1000000,
+    ),
+    taskTimeoutMs: integer(
+      input.taskTimeoutMs,
+      '任务时间上限',
+      900000,
+      1000,
+      7200000,
+    ),
     intervalMs: integer(input.intervalMs, '轮次间隔', 3000, 1000, 60000),
     timeoutMs: integer(input.timeoutMs, '推理超时', 60000, 1000, 120000),
     maxTokens: integer(
@@ -299,6 +315,8 @@ type Job = {
   memory: AgentRunState;
   attention: AgentAttention;
   updating?: boolean;
+  timer?: ReturnType<typeof setTimeout>;
+  controlling?: boolean;
 };
 const active = (status: ManagedAgentView['status']) =>
   ['joining', 'running', 'stopping'].includes(status);
@@ -316,7 +334,11 @@ export class AgentManager {
     const data = JSON.stringify(
       this.list()
         .reverse()
-        .map((view) => ({ ...view, sessionId: undefined })),
+        .map((view) => ({
+          ...view,
+          sessionId: undefined,
+          runtime: this.jobs.get(view.id)?.memory,
+        })),
       null,
       2,
     );
@@ -330,7 +352,7 @@ export class AgentManager {
     void this.saving.catch(() => console.error('无法保存 Agent 记录。'));
   }
   async load() {
-    let saved: ManagedAgentView[];
+    let saved: (ManagedAgentView & { runtime?: AgentRunState })[];
     try {
       saved = JSON.parse(await readFile(this.archivePath, 'utf8'));
     } catch (error) {
@@ -356,9 +378,30 @@ export class AgentManager {
             : [],
         },
         abort: new AbortController(),
-        memory: {},
+        memory: view.runtime ?? {
+          task: {
+            ...newTask(settings.goal),
+            status: 'paused',
+            reason: '旧任务已迁移，请确认后继续。',
+          },
+        },
         attention: new AgentAttention(),
       };
+      if (
+        job.memory.task &&
+        ['running', 'waiting'].includes(job.memory.task.status)
+      ) {
+        job.memory.task.status = 'paused';
+        job.memory.task.reason = '服务重启，任务进度已保留，请手动继续。';
+      }
+      if (job.memory.task && !job.memory.task.privateTo)
+        delete job.memory.task.owner;
+      if (job.memory.task?.privateTo) {
+        job.memory.audienceExpired = true;
+        job.memory.task.status = 'needs_input';
+        job.memory.task.reason =
+          '服务重启后原私聊会话已失效，请在控制台重新布置任务。';
+      }
       this.jobs.set(view.id, job);
       if (
         ['idle', 'running', 'joining', 'failed'].includes(view.status) &&
@@ -385,7 +428,16 @@ export class AgentManager {
   ) {}
   list() {
     return [...this.jobs.values()]
-      .map(({ view }) => ({ ...view, logs: [...view.logs] }))
+      .map(({ view, memory }) =>
+        structuredClone({
+          ...view,
+          goal: memory.task?.goal ?? view.goal,
+          task: memory.task,
+          usage: memory.usage,
+          lastResponse: memory.lastResponse,
+          logs: [...view.logs],
+        }),
+      )
       .reverse();
   }
   async models(id: string) {
@@ -437,29 +489,56 @@ export class AgentManager {
         logs: [],
       },
       abort: new AbortController(),
-      memory: {},
+      memory: { task: newTask(settings.goal) },
       attention: new AgentAttention(),
     };
     this.jobs.set(job.view.id, job);
     job.done = this.execute(job, provider);
     this.persist();
-    return { ...job.view, logs: [...job.view.logs] };
+    return this.list().find((v) => v.id === job.view.id)!;
   }
   resume(id: string, value: unknown = {}) {
     if (this.closing) throw new ManagementError('世界服务正在关闭。', 503);
     const job = this.jobs.get(id);
     if (!job) throw new ManagementError('Agent 不存在。', 404);
-    if (active(job.view.status) || job.updating)
+    if (active(job.view.status) || job.updating || job.controlling)
       throw new ManagementError('Agent 正在运行或关闭，请稍候。', 409);
     const input = object(value);
+    if (job.memory.audienceExpired && input.goal === undefined)
+      throw new ManagementError(
+        '原私聊会话已失效，请重新布置任务，避免向错误的玩家发送进展。',
+        409,
+      );
     const provider = this.providers.get(job.view.providerId);
     const settings = validateAgent(
-      { ...job.view, goal: input.goal ?? job.view.goal },
+      {
+        ...job.view,
+        goal: input.goal ?? job.memory.task?.goal ?? job.view.goal,
+      },
       provider,
     );
     if (!job.session && [...this.jobs.values()].filter(resident).length >= 4)
       throw new ManagementError('最多同时在线 4 个 Agent，请先关闭一个。', 409);
-    if (settings.goal !== job.view.goal) job.memory = {};
+    clearTimeout(job.timer);
+    if (
+      input.goal !== undefined ||
+      !job.memory.task ||
+      ['completed', 'cancelled'].includes(job.memory.task.status)
+    ) {
+      job.memory = { usage: job.memory.usage, task: newTask(settings.goal) };
+    } else {
+      const task = job.memory.task;
+      if (task.status === 'budget') {
+        task.calls = 0;
+        task.tokens = 0;
+        task.elapsedMs = 0;
+        task.estimated = false;
+      }
+      task.status = 'running';
+      task.reason = '';
+      job.memory.failures = 0;
+      job.memory.noProgress = 0;
+    }
     Object.assign(job.view, settings, {
       providerName: provider.name,
       status: job.session ? 'running' : 'joining',
@@ -467,19 +546,23 @@ export class AgentManager {
     job.abort = new AbortController();
     job.done = this.execute(job, provider);
     this.persist();
-    return { ...job.view, logs: [...job.view.logs] };
+    return this.list().find((v) => v.id === job.view.id)!;
   }
   async update(id: string, value: unknown) {
     if (this.closing) throw new ManagementError('世界服务正在关闭。', 503);
     const job = this.jobs.get(id);
     if (!job) throw new ManagementError('Agent 不存在。', 404);
-    if (active(job.view.status) || job.updating)
+    if (active(job.view.status) || job.updating || job.controlling)
       throw new ManagementError('请等待 Agent 待命，或关闭后再修改参数。', 409);
     const input = object(value);
     const provider = this.providers.get(
       text(input.providerId, '服务商', 80, job.view.providerId),
     );
-    const settings = validateAgent({ ...job.view, ...input }, provider);
+    const currentGoal = job.memory.task?.goal ?? job.view.goal;
+    const settings = validateAgent(
+      { ...job.view, goal: currentGoal, ...input },
+      provider,
+    );
     job.updating = true;
     try {
       const session = job.session;
@@ -499,20 +582,29 @@ export class AgentManager {
           );
       }
       if (
-        settings.goal !== job.view.goal ||
+        settings.goal !== currentGoal ||
         settings.providerId !== job.view.providerId ||
         settings.model !== job.view.model ||
         settings.allowEdits !== job.view.allowEdits
       ) {
-        job.memory = {};
+        clearTimeout(job.timer);
+        job.memory = {
+          usage: job.memory.usage,
+          task: {
+            ...newTask(settings.goal),
+            status: 'paused',
+            reason: '参数已修改，等待继续。',
+          },
+        };
         job.attention.clear();
       }
       Object.assign(job.view, settings, { providerName: provider.name });
       this.persist();
       await this.saving;
-      return { ...job.view, logs: [...job.view.logs] };
+      return this.list().find((v) => v.id === job.view.id)!;
     } finally {
       job.updating = false;
+      this.schedule(job);
     }
   }
   async setVoice(id: string, value: unknown) {
@@ -535,10 +627,83 @@ export class AgentManager {
       job.view.voiceReplies = enabled;
       this.persist();
       await this.saving;
-      return { ...job.view, logs: [...job.view.logs] };
+      return this.list().find((v) => v.id === job.view.id)!;
     } finally {
       job.updating = false;
+      this.schedule(job);
     }
+  }
+  private wake(job: Job) {
+    if (
+      this.closing ||
+      job.controlling ||
+      job.updating ||
+      (job.view.status !== 'idle' &&
+        !(job.view.status === 'failed' && job.attention.pending)) ||
+      !job.session
+    )
+      return;
+    clearTimeout(job.timer);
+    job.view.status = 'running';
+    job.abort = new AbortController();
+    job.done = this.execute(job, this.providers.get(job.view.providerId));
+  }
+  private schedule(job: Job) {
+    clearTimeout(job.timer);
+    if (
+      this.closing ||
+      job.controlling ||
+      job.updating ||
+      (job.view.status !== 'idle' &&
+        !(job.view.status === 'failed' && job.attention.pending)) ||
+      !job.session
+    )
+      return;
+    if (job.attention.pending) {
+      job.timer = setTimeout(() => this.wake(job), 0);
+    } else if (['running', 'waiting'].includes(job.memory.task?.status ?? '')) {
+      job.timer = setTimeout(() => this.wake(job), nextIntervalMs(job.view));
+    }
+    job.timer?.unref();
+  }
+  async controlTask(id: string, operation: 'pause' | 'cancel') {
+    const job = this.jobs.get(id);
+    if (!job) throw new ManagementError('Agent 不存在。', 404);
+    if (
+      this.closing ||
+      job.updating ||
+      job.controlling ||
+      ['joining', 'stopping'].includes(job.view.status)
+    )
+      throw new ManagementError('Agent 状态正在更新，请稍候。', 409);
+    job.controlling = true;
+    clearTimeout(job.timer);
+    job.attention.clear();
+    job.abort.abort();
+    try {
+      await job.done;
+      if (job.memory.task) {
+        job.memory.task.status = operation === 'pause' ? 'paused' : 'cancelled';
+        job.memory.task.reason =
+          operation === 'pause' ? '已由玩家暂停，进度保留。' : '已由玩家取消。';
+      }
+      if (operation === 'cancel') {
+        job.memory.previous = undefined;
+        job.memory.unfinishedBuild = undefined;
+      }
+      if (job.session) job.view.status = 'idle';
+      this.persist();
+      await this.saving;
+      return this.list().find((v) => v.id === id)!;
+    } finally {
+      job.controlling = false;
+    }
+  }
+  async assignTask(id: string, value: unknown) {
+    const goal = text(object(value).goal, '任务目标', 2000);
+    if (!goal) throw new ManagementError('请填写任务目标。');
+    await this.controlTask(id, 'pause');
+    return this.resume(id, { goal });
   }
   private async execute(job: Job, provider: SavedProvider, run = true) {
     const log = (message: string) => {
@@ -561,20 +726,46 @@ export class AgentManager {
         session.onEvent = (event) => {
           if (
             this.closing ||
-            job.updating ||
+            job.controlling ||
             job.session !== session ||
-            !['running', 'idle'].includes(job.view.status)
+            !['running', 'idle', 'failed'].includes(job.view.status)
           )
             return;
           if (!job.attention.push(event, session.room.sessionId)) return;
-          if (job.view.status === 'idle') {
-            log('收到玩家 @，已唤醒并继续任务。');
-            try {
-              this.resume(job.view.id);
-            } catch {
-              job.attention.clear();
-              log('唤醒失败，请检查配置后手动继续。');
-            }
+          const command = (event.data as ChatData).text
+            .trim()
+            .replace(/^@[^\n]+?\s+(?=(?:暂停|停止|取消|别建))/u, '')
+            .replace(/[！!。.?？\s]+$/u, '');
+          const task = job.memory.task;
+          if (
+            task &&
+            (!task.owner || task.owner === event.actor) &&
+            (!task.privateTo ||
+              (task.privateTo === event.actor &&
+                (event.data as ChatData).scope !== 'public')) &&
+            /^(暂停|暂停任务|停止|停止任务|别建了|取消|取消任务)$/u.test(
+              command,
+            )
+          ) {
+            void this.controlTask(
+              job.view.id,
+              command.startsWith('取消') ? 'cancel' : 'pause',
+            )
+              .then(() =>
+                session.request('chat', {
+                  text: command.startsWith('取消')
+                    ? '任务已取消，我会留在这里待命。'
+                    : '任务已暂停，进度已保留。',
+                  scope: 'private',
+                  recipients: [event.actor],
+                }),
+              )
+              .catch(() => {});
+            return;
+          }
+          if (['idle', 'failed'].includes(job.view.status)) {
+            log('收到玩家消息，处理一次唤醒。');
+            this.wake(job);
           }
         };
         session.room.onMessage(
@@ -600,22 +791,23 @@ export class AgentManager {
       if (!voiceResult.ok) log('语音回复开关未生效，请检查服务器版本。');
       if (!job.abort.signal.aborted && run) {
         job.view.status = 'running';
-        log('开始新一轮任务。');
-        await runAgent(
+        log(job.attention.pending ? '处理当前消息。' : '推进一次任务决策。');
+        await runTaskStep(
           job.session,
           this.dependencies.planner(config, provider),
           config,
           job.abort.signal,
-          log,
           job.memory,
           job.attention,
+          log,
         );
       }
-      finalStatus = job.abort.signal.aborted ? 'failed' : 'idle';
+      finalStatus =
+        job.abort.signal.aborted && !job.controlling ? 'failed' : 'idle';
       if (finalStatus === 'idle')
         log(
           run
-            ? '本轮任务结束，留在世界待命；可通过 @ 或继续运行唤醒。'
+            ? '本次唤醒结束，按任务状态安排下一次检查。'
             : '服务恢复，已回到世界待命；可通过 @ 或继续运行唤醒。',
         );
     } catch (error) {
@@ -635,6 +827,7 @@ export class AgentManager {
       }
       if (job.view.status !== 'stopping') job.view.status = finalStatus;
       this.persist();
+      this.schedule(job);
     }
   }
   stop(id: string) {
@@ -644,6 +837,7 @@ export class AgentManager {
       job.view.status !== 'stopping' &&
       (resident(job) || job.view.status !== 'stopped')
     ) {
+      clearTimeout(job.timer);
       job.view.status = 'stopping';
       job.attention.clear();
       job.abort.abort();
@@ -662,7 +856,7 @@ export class AgentManager {
         this.persist();
       })();
     }
-    return { ...job.view, logs: [...job.view.logs] };
+    return this.list().find((v) => v.id === job.view.id)!;
   }
   async removeProvider(id: string) {
     if ([...this.jobs.values()].some((j) => j.view.providerId === id))

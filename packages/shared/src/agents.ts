@@ -14,8 +14,12 @@ export type AgentSettings = {
   model: string;
   name: string;
   goal: string;
+  /** Legacy compatibility only; task continuation is decided from progress. */
   continuous: boolean;
+  /** Maximum model calls per task, not a target number of turns. */
   maxTurns: number;
+  tokenBudget?: number;
+  taskTimeoutMs?: number;
   intervalMode: 'fixed' | 'random';
   intervalMinMs: number;
   intervalMaxMs: number;
@@ -27,6 +31,30 @@ export type AgentSettings = {
   thinking: 'enabled' | 'disabled';
   reasoningEffort: 'none' | 'low' | 'high' | 'max';
 };
+export type AgentTaskStatus =
+  | 'running'
+  | 'waiting'
+  | 'needs_input'
+  | 'blocked'
+  | 'paused'
+  | 'completed'
+  | 'cancelled'
+  | 'budget';
+export type AgentTask = {
+  goal: string;
+  status: AgentTaskStatus;
+  summary: string;
+  reason: string;
+  owner?: string;
+  privateTo?: string;
+  calls: number;
+  tokens: number;
+  estimated: boolean;
+  startedAt: number;
+  elapsedMs: number;
+  waitFor?: 'world' | 'players';
+};
+export type AgentUsage = { calls: number; tokens: number; estimated: boolean };
 export type ManagedAgentView = AgentSettings & {
   id: string;
   providerName: string;
@@ -41,4 +69,7 @@ export type ManagedAgentView = AgentSettings & {
   createdAt: number;
   sessionId?: string;
   logs: string[];
+  task?: AgentTask;
+  usage?: AgentUsage;
+  lastResponse?: string;
 };
