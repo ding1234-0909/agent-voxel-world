@@ -3,13 +3,7 @@ import type { Connection } from '../../network/connection';
 import type { RealtimeEvent } from '../../../../../packages/shared/src/realtime';
 import { PCMPlayer, PCMCapture } from '../../audio/realtime-audio';
 import './realtime.css';
-export function RealtimeVoicePanel({
-  connection,
-  onClose,
-}: {
-  connection: Connection;
-  onClose(): void;
-}) {
+export function RealtimeVoicePanel({ connection }: { connection: Connection }) {
   const [status, setStatus] = useState('未连接 · 真实调用默认关闭');
   const [subtitle, setSubtitle] = useState('');
   const [sceneConsent, setSceneConsent] = useState(false);
@@ -29,10 +23,12 @@ export function RealtimeVoicePanel({
   const audio = useRef<AudioContext | undefined>(undefined);
   const player = useRef<PCMPlayer | undefined>(undefined);
   const capture = useRef(new PCMCapture());
+  const ownsRecording = useRef(false);
   const clearMedia = () => {
     capture.current.stop();
     player.current?.stop();
-    connection.voiceLabRecording = false;
+    if (ownsRecording.current) connection.voiceLabRecording = false;
+    ownsRecording.current = false;
     setRecording(false);
     setReady(false);
     setProposals([]);
@@ -112,10 +108,6 @@ export function RealtimeVoicePanel({
     const hide = () => {
       if (document.hidden) stop();
     };
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', escape);
     document.addEventListener('visibilitychange', hide);
     return () => {
       stop();
@@ -123,7 +115,6 @@ export function RealtimeVoicePanel({
       connection.onRealtime = () => {};
       connection.onRealtimeReset = () => {};
       document.removeEventListener('visibilitychange', hide);
-      window.removeEventListener('keydown', escape);
       void audio.current?.close().catch(() => {});
     };
   }, [connection]);
@@ -155,7 +146,8 @@ export function RealtimeVoicePanel({
   const commit = async (value?: string) => {
     player.current?.stop();
     capture.current.stop();
-    connection.voiceLabRecording = false;
+    if (ownsRecording.current) connection.voiceLabRecording = false;
+    ownsRecording.current = false;
     setRecording(false);
     setReady(false);
     setSubtitle('');
@@ -176,6 +168,7 @@ export function RealtimeVoicePanel({
     player.current?.stop();
     connection.stopSpatialInput();
     connection.voiceLabRecording = true;
+    ownsRecording.current = true;
     setRecording(true);
     try {
       const active = await capture.current.start(
@@ -191,7 +184,8 @@ export function RealtimeVoicePanel({
         },
       );
       if (!active) {
-        connection.voiceLabRecording = false;
+        if (ownsRecording.current) connection.voiceLabRecording = false;
+        ownsRecording.current = false;
         setRecording(false);
       }
     } catch {
@@ -200,14 +194,7 @@ export function RealtimeVoicePanel({
     }
   };
   return (
-    <section className="realtime-panel" role="dialog" aria-label="百炼实时语音">
-      <div className="realtime-title">
-        <h2>百炼实时语音</h2>
-        <button onClick={onClose}>关闭</button>
-      </div>
-      <p>
-        离线演示只产生合成提示音，不访问模型或麦克风。真实会话需要服务端另行启用。
-      </p>
+    <section className="realtime-panel" aria-label="百炼实时语音">
       <label>
         <input
           type="checkbox"
@@ -238,7 +225,9 @@ export function RealtimeVoicePanel({
         </button>
         <button onClick={stop}>中断并关闭</button>
       </div>
-      <p role="status">{status}</p>
+      <p className="voice-state" role="status">
+        {status}
+      </p>
       <form
         onSubmit={(e) => {
           e.preventDefault();

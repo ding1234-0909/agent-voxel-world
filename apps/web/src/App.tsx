@@ -6,7 +6,6 @@ import { useWorldScene } from './features/world/useWorldScene';
 import { ControlConsole } from './features/console/ControlConsole';
 import { ChatPanel } from './features/chat/ChatPanel';
 import { SpatialVoicePanel } from './features/voice/SpatialVoicePanel';
-import { RealtimeVoicePanel } from './features/voice/RealtimeVoicePanel';
 import { GameHeader } from './features/hud/GameHeader';
 import { GameFooter } from './features/hud/GameFooter';
 import { releasePointerLock } from './utils/pointer-lock';
@@ -20,7 +19,6 @@ export function App({ connection }: { connection: Connection }) {
     initialTab?: 'agents';
   } | null>(null);
   const [showControls, setShowControls] = useState(false);
-  const [realtimeOpen, setRealtimeOpen] = useState(false);
   const [voiceActivity, setVoiceActivity] = useState('idle');
   const [name, setName] = useState(savedName ?? 'Explorer');
   const [joined, setJoined] = useState(!!savedName);
@@ -53,11 +51,6 @@ export function App({ connection }: { connection: Connection }) {
     setConsoleEntry({ initialTab });
   };
 
-  const openRealtime = () => {
-    releasePointerLock();
-    setRealtimeOpen(true);
-  };
-
   const joinWorld = async () => {
     if (connection.status === 'connected') return true;
     const explorerName = name.trim() || 'Explorer';
@@ -88,7 +81,6 @@ export function App({ connection }: { connection: Connection }) {
         voiceActivity={voiceActivity}
         isPlayersOpen={activePanel === 'players'}
         onOpenConsole={() => openConsole()}
-        onOpenRealtime={openRealtime}
         onTogglePlayers={() =>
           setActivePanel((prev) => (prev === 'players' ? null : 'players'))
         }
@@ -116,13 +108,6 @@ export function App({ connection }: { connection: Connection }) {
           <div className="crosshair">+</div>
           <div className="target">{target}</div>
         </>
-      )}
-
-      {joined && realtimeOpen && (
-        <RealtimeVoicePanel
-          connection={connection}
-          onClose={() => setRealtimeOpen(false)}
-        />
       )}
 
       <ControlConsole

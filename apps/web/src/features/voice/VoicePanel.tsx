@@ -1,4 +1,6 @@
 import { voiceApi } from './api';
+import { RealtimeVoicePanel } from './RealtimeVoicePanel';
+import { VoiceGuide } from './VoiceGuide';
 import { useEffect, useRef, useState } from 'react';
 import type { Connection } from '../../network/connection';
 import { BrowserSpeech } from '../../audio/browser-speech';
@@ -17,12 +19,14 @@ export function VoicePanel({
   connection,
   onJoin,
   hidden = false,
+  active = true,
   onClose,
   onActivityChange,
 }: {
   connection: Connection;
   onJoin: () => Promise<boolean>;
   hidden?: boolean;
+  active?: boolean;
   onClose?: () => void;
   onActivityChange?: (state: string) => void;
 }) {
@@ -180,261 +184,283 @@ export function VoicePanel({
       ? localReady && recorder.canRecord
       : speech.canListen;
   return (
-    <section
-      id="voice-panel"
-      className="voice"
-      aria-label="语音实验室"
-      hidden={hidden}
-    >
-      {onClose && (
-        <button
-          className="panel-close"
-          aria-label="收起语音面板"
-          onClick={onClose}
-        >
-          收起 ×
-        </button>
-      )}
-      <div className="eyebrow">VOICE LAB · 无需云账号</div>
-      <label className="voice-label">
-        接入方案
-        <select
-          aria-label="语音接入方案"
-          value={provider}
-          onChange={(e) => {
-            stop();
-            setProvider(e.target.value);
-            setVoice({
-              state: 'idle',
-              subtitle: '方案已切换，可以开始新一轮对话。',
-            });
-          }}
-        >
-          <option value="browser">语音回声 · 非 AI</option>
-          <option value="ollama" disabled={!capabilities?.ollamaConfigured}>
-            本地 AI · Ollama{capabilities?.ollamaConfigured ? '' : '（未配置）'}
-          </option>
-          <option value="mock">Mock · 仅文字模拟</option>
-        </select>
-      </label>
-      {provider !== 'mock' && (
+    <div className="console-voice-layout" hidden={hidden}>
+      <section id="voice-panel" className="voice" aria-label="语音对话设置">
+        {onClose && (
+          <button
+            className="panel-close"
+            aria-label="收起语音面板"
+            onClick={onClose}
+          >
+            收起 ×
+          </button>
+        )}
         <label className="voice-label">
-          语音识别方式
+          接入方案
           <select
-            aria-label="语音识别方式"
-            value={recognizer}
+            aria-label="语音接入方案"
+            value={provider}
             onChange={(e) => {
               stop();
-              setRecognizer(e.target.value);
-              setVoice({ state: 'idle', subtitle: '识别方式已切换。' });
-            }}
-          >
-            <option value="local">本机 Whisper · 无需联网识别</option>
-            <option value="browser">浏览器在线识别 · 需网络</option>
-          </select>
-        </label>
-      )}
-      {provider !== 'mock' && (
-        <div className="voice-options">
-          <select
-            aria-label="语音语言"
-            value={lang}
-            onChange={(e) => {
-              stop();
-              setLang(e.target.value);
-              setVoice({ state: 'idle', subtitle: '语言已切换。' });
-            }}
-          >
-            <option value="zh-CN">中文</option>
-            <option value="en-US">English</option>
-          </select>
-          <label>
-            <input
-              type="checkbox"
-              checked={readAloud}
-              disabled={!speech.canSpeak}
-              onChange={(e) => {
-                speech.stop();
-                setReadAloud(e.target.checked);
-                setVoice((v) =>
-                  v.state === 'speaking' ? { ...v, state: 'idle' } : v,
-                );
-              }}
-            />
-            自动朗读
-          </label>
-        </div>
-      )}
-      <div className="voice-state">{voice.state}</div>
-      <p aria-live="polite">{voice.subtitle}</p>
-      {!connected && (
-        <small role="status" className="voice-connection">
-          {connecting
-            ? '正在连接世界，请稍候…'
-            : connection.status === 'lobby'
-              ? '尚未进入世界。点击下方按钮，将使用大厅昵称进入并发送；麦克风在连接后可用。'
-              : '世界服务未连接，正在尝试恢复。可点击下方按钮重试，输入内容会保留。'}
-        </small>
-      )}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          void send(text);
-        }}
-      >
-        <input
-          aria-label="语音文字输入"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          maxLength={240}
-          required
-        />
-        <button disabled={connecting || !text.trim()}>
-          {connecting
-            ? '连接中…'
-            : connected
-              ? actionLabel
-              : connection.status === 'lobby'
-                ? `进入并${actionLabel}`
-                : `重连并${actionLabel}`}
-        </button>
-      </form>
-      <div className="voice-actions">
-        {provider !== 'mock' && (
-          <button
-            disabled={!connected || !micAvailable || connection.chatRecording}
-            onClick={() => {
-              if (recognizer === 'local' && voice.state === 'listening') {
-                recorder.finish();
-                return;
-              }
-              stop();
-              connection.stopSpatialInput();
-              connection.voiceLabRecording = true;
-              if (recognizer === 'local') {
-                void recorder.start(lang, recordingCallbacks);
-                return;
-              }
-              setVoice({
-                state: 'listening',
-                subtitle: '浏览器在线识别中，停顿后自动发送…',
-              });
-              speech.listen(
-                lang,
-                recordingCallbacks.onText,
-                recordingCallbacks.onError,
-                () => {
-                  connection.voiceLabRecording = false;
-                  setVoice({
-                    state: 'idle',
-                    subtitle: '录音结束。可以重试或输入文字。',
-                  });
-                },
-              );
-            }}
-          >
-            {recognizer === 'local' && voice.state === 'listening'
-              ? '结束录音'
-              : '麦克风'}
-          </button>
-        )}
-        <button
-          onClick={() => {
-            stop();
-            setVoice({
-              state: 'interrupted',
-              subtitle: '已停止识别、回复和朗读。',
-            });
-          }}
-        >
-          打断
-        </button>
-        {provider !== 'mock' && (
-          <button
-            disabled={!speech.canSpeak || !voice.speakText}
-            onClick={() => {
-              const reply = voice.speakText!;
-              stop();
-              setVoice({ ...voice, state: 'speaking' });
-              speech.speak(
-                reply,
-                lang,
-                () => setVoice({ ...voice, state: 'idle' }),
-                () =>
-                  setVoice({
-                    ...voice,
-                    state: 'error',
-                    subtitle: `${voice.subtitle}\n浏览器无法朗读，请检查语音或音频设置。`,
-                  }),
-              );
-            }}
-          >
-            朗读回复
-          </button>
-        )}
-      </div>
-      {provider !== 'mock' && recognizer === 'local' && (
-        <>
-          <label className="voice-label">
-            或选择音频文件（最长 20 秒 / 5 MiB）
-            <input
-              type="file"
-              aria-label="选择音频文件"
-              accept=".wav,.webm,.mp4,.m4a,.ogg"
-              disabled={!connected || !localReady}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                e.target.value = '';
-                if (file) {
-                  stop();
-                  void recorder.transcribeFile(file, lang, recordingCallbacks);
-                }
-              }}
-            />
-          </label>
-          <small role="status">
-            {capabilityError ||
-              capabilities?.local.reason ||
-              '正在检测本机识别服务…'}
-          </small>
-          {!localReady && (
-            <button onClick={() => setRefresh((n) => n + 1)}>重新检测</button>
-          )}
-        </>
-      )}
-      {provider !== 'mock' &&
-        recognizer === 'browser' &&
-        voice.state === 'error' && (
-          <button
-            onClick={() => {
-              stop();
-              setRecognizer('local');
-              setRefresh((n) => n + 1);
+              setProvider(e.target.value);
               setVoice({
                 state: 'idle',
-                subtitle: '已切换到本机 Whisper，请重新点击麦克风录音。',
+                subtitle: '方案已切换，可以开始新一轮对话。',
               });
             }}
           >
-            改用本机识别
-          </button>
+            <option value="browser">语音回声 · 非 AI</option>
+            <option value="ollama" disabled={!capabilities?.ollamaConfigured}>
+              本地 AI · Ollama
+              {capabilities?.ollamaConfigured ? '' : '（未配置）'}
+            </option>
+            <option value="bailian">百炼 · 实时语音</option>
+            <option value="mock">Mock · 仅文字模拟</option>
+          </select>
+        </label>
+        {provider === 'bailian' ? (
+          connected ? (
+            active && <RealtimeVoicePanel connection={connection} />
+          ) : (
+            <div className="voice-connection" role="status">
+              <p>进入世界后即可使用百炼实时语音或离线演示。</p>
+              <button disabled={connecting} onClick={() => void onJoin()}>
+                {connecting ? '连接中…' : '进入世界'}
+              </button>
+            </div>
+          )
+        ) : (
+          <>
+            {provider !== 'mock' && (
+              <label className="voice-label">
+                语音识别方式
+                <select
+                  aria-label="语音识别方式"
+                  value={recognizer}
+                  onChange={(e) => {
+                    stop();
+                    setRecognizer(e.target.value);
+                    setVoice({ state: 'idle', subtitle: '识别方式已切换。' });
+                  }}
+                >
+                  <option value="local">本机 Whisper · 无需联网识别</option>
+                  <option value="browser">浏览器在线识别 · 需网络</option>
+                </select>
+              </label>
+            )}
+            {provider !== 'mock' && (
+              <div className="voice-options">
+                <select
+                  aria-label="语音语言"
+                  value={lang}
+                  onChange={(e) => {
+                    stop();
+                    setLang(e.target.value);
+                    setVoice({ state: 'idle', subtitle: '语言已切换。' });
+                  }}
+                >
+                  <option value="zh-CN">中文</option>
+                  <option value="en-US">English</option>
+                </select>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={readAloud}
+                    disabled={!speech.canSpeak}
+                    onChange={(e) => {
+                      speech.stop();
+                      setReadAloud(e.target.checked);
+                      setVoice((v) =>
+                        v.state === 'speaking' ? { ...v, state: 'idle' } : v,
+                      );
+                    }}
+                  />
+                  自动朗读
+                </label>
+              </div>
+            )}
+            <div className="voice-state">{voice.state}</div>
+            <p aria-live="polite">{voice.subtitle}</p>
+            {!connected && (
+              <small role="status" className="voice-connection">
+                {connecting
+                  ? '正在连接世界，请稍候…'
+                  : connection.status === 'lobby'
+                    ? '尚未进入世界。点击下方按钮，将使用大厅昵称进入并发送；麦克风在连接后可用。'
+                    : '世界服务未连接，正在尝试恢复。可点击下方按钮重试，输入内容会保留。'}
+              </small>
+            )}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void send(text);
+              }}
+            >
+              <input
+                aria-label="语音文字输入"
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                maxLength={240}
+                required
+              />
+              <button disabled={connecting || !text.trim()}>
+                {connecting
+                  ? '连接中…'
+                  : connected
+                    ? actionLabel
+                    : connection.status === 'lobby'
+                      ? `进入并${actionLabel}`
+                      : `重连并${actionLabel}`}
+              </button>
+            </form>
+            <div className="voice-actions">
+              {provider !== 'mock' && (
+                <button
+                  disabled={
+                    !connected || !micAvailable || connection.chatRecording
+                  }
+                  onClick={() => {
+                    if (recognizer === 'local' && voice.state === 'listening') {
+                      recorder.finish();
+                      return;
+                    }
+                    stop();
+                    connection.stopSpatialInput();
+                    connection.voiceLabRecording = true;
+                    if (recognizer === 'local') {
+                      void recorder.start(lang, recordingCallbacks);
+                      return;
+                    }
+                    setVoice({
+                      state: 'listening',
+                      subtitle: '浏览器在线识别中，停顿后自动发送…',
+                    });
+                    speech.listen(
+                      lang,
+                      recordingCallbacks.onText,
+                      recordingCallbacks.onError,
+                      () => {
+                        connection.voiceLabRecording = false;
+                        setVoice({
+                          state: 'idle',
+                          subtitle: '录音结束。可以重试或输入文字。',
+                        });
+                      },
+                    );
+                  }}
+                >
+                  {recognizer === 'local' && voice.state === 'listening'
+                    ? '结束录音'
+                    : '麦克风'}
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  stop();
+                  setVoice({
+                    state: 'interrupted',
+                    subtitle: '已停止识别、回复和朗读。',
+                  });
+                }}
+              >
+                打断
+              </button>
+              {provider !== 'mock' && (
+                <button
+                  disabled={!speech.canSpeak || !voice.speakText}
+                  onClick={() => {
+                    const reply = voice.speakText!;
+                    stop();
+                    setVoice({ ...voice, state: 'speaking' });
+                    speech.speak(
+                      reply,
+                      lang,
+                      () => setVoice({ ...voice, state: 'idle' }),
+                      () =>
+                        setVoice({
+                          ...voice,
+                          state: 'error',
+                          subtitle: `${voice.subtitle}\n浏览器无法朗读，请检查语音或音频设置。`,
+                        }),
+                    );
+                  }}
+                >
+                  朗读回复
+                </button>
+              )}
+            </div>
+            {provider !== 'mock' && recognizer === 'local' && (
+              <>
+                <label className="voice-label">
+                  或选择音频文件（最长 20 秒 / 5 MiB）
+                  <input
+                    type="file"
+                    aria-label="选择音频文件"
+                    accept=".wav,.webm,.mp4,.m4a,.ogg"
+                    disabled={!connected || !localReady}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = '';
+                      if (file) {
+                        stop();
+                        void recorder.transcribeFile(
+                          file,
+                          lang,
+                          recordingCallbacks,
+                        );
+                      }
+                    }}
+                  />
+                </label>
+                <small role="status">
+                  {capabilityError ||
+                    capabilities?.local.reason ||
+                    '正在检测本机识别服务…'}
+                </small>
+                {!localReady && (
+                  <button onClick={() => setRefresh((n) => n + 1)}>
+                    重新检测
+                  </button>
+                )}
+              </>
+            )}
+            {provider !== 'mock' &&
+              recognizer === 'browser' &&
+              voice.state === 'error' && (
+                <button
+                  onClick={() => {
+                    stop();
+                    setRecognizer('local');
+                    setRefresh((n) => n + 1);
+                    setVoice({
+                      state: 'idle',
+                      subtitle: '已切换到本机 Whisper，请重新点击麦克风录音。',
+                    });
+                  }}
+                >
+                  改用本机识别
+                </button>
+              )}
+            <small>
+              {provider === 'mock'
+                ? '文字模拟 · 无麦克风、音频或真实 AI'
+                : provider === 'browser'
+                  ? '无需账号或信用卡。复述你的话，用于体验识别与朗读。'
+                  : '本机 Ollama 生成回复，每轮独立，不控制世界。'}
+            </small>
+            {provider !== 'mock' && (
+              <small>
+                {recognizer === 'local'
+                  ? '录音仅发往本机服务，识别后删除临时文件。朗读仍使用浏览器语音。'
+                  : '在线识别可能将音频发送给浏览器厂商；网络不可达时请改用本机识别。'}
+                {!micAvailable && ' 当前无法录音，可输入文字或检查识别服务。'}
+                {!speech.canSpeak && ' 当前无法朗读，仅显示文字。'}
+              </small>
+            )}
+          </>
         )}
-      <small>
-        {provider === 'mock'
-          ? '文字模拟 · 无麦克风、音频或真实 AI'
-          : provider === 'browser'
-            ? '无需账号或信用卡。复述你的话，用于体验识别与朗读。'
-            : '本机 Ollama 生成回复，每轮独立，不控制世界。'}
-      </small>
-      {provider !== 'mock' && (
-        <small>
-          {recognizer === 'local'
-            ? '录音仅发往本机服务，识别后删除临时文件。朗读仍使用浏览器语音。'
-            : '在线识别可能将音频发送给浏览器厂商；网络不可达时请改用本机识别。'}
-          {!micAvailable && ' 当前无法录音，可输入文字或检查识别服务。'}
-          {!speech.canSpeak && ' 当前无法朗读，仅显示文字。'}
-        </small>
-      )}
-    </section>
+      </section>
+      <VoiceGuide realtime={provider === 'bailian'} />
+    </div>
   );
 }

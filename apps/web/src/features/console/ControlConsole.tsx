@@ -7,7 +7,7 @@ import { AgentForm } from './AgentForm';
 import { AgentList } from './AgentList';
 type ConsoleProps = Omit<
   ComponentProps<typeof VoicePanel>,
-  'hidden' | 'onClose'
+  'hidden' | 'onClose' | 'active'
 > & { open: boolean; initialTab?: 'agents'; onClose: () => void };
 export function ControlConsole({
   open,
@@ -97,25 +97,9 @@ export function ControlConsole({
         <div className="console-voice" hidden={tab !== 'voice'}>
           <div className="console-section-heading">
             <h3>语音设置</h3>
-            <p>选择识别与朗读方式，在这里试试语音对话。</p>
+            <p>选择接入方案，设置并试用语音对话。</p>
           </div>
-          <div className="console-voice-layout">
-            <VoicePanel {...voiceProps} />
-            <aside className="console-voice-guide" aria-label="语音使用说明">
-              <h4>在世界中交流</h4>
-              <p>
-                附近语音：进入世界后，在侧边语音面板开启麦克风和收听。声音随距离与朝向变化，附近
-                Agent 会收到转写。
-              </p>
-              <p>
-                聊天语音：在聊天框中使用语音转文字或录语音，也可以 @ 玩家与
-                Agent 私聊。
-              </p>
-              <small>
-                此处的识别与朗读选项用于语音实验室。切换页面或关闭控制台会保留设置；需要结束录音或朗读时，点击“打断”。
-              </small>
-            </aside>
-          </div>
+          <VoicePanel {...voiceProps} active={open && tab === 'voice'} />
         </div>
         <div hidden={tab === 'voice'}>
           {error && (

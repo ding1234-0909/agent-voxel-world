@@ -5,7 +5,6 @@ interface GameHeaderProps {
   voiceActivity: string;
   isPlayersOpen: boolean;
   onOpenConsole: () => void;
-  onOpenRealtime: () => void;
   onTogglePlayers: () => void;
   onLeaveWorld: () => void;
 }
@@ -24,7 +23,6 @@ export function GameHeader({
   voiceActivity,
   isPlayersOpen,
   onOpenConsole,
-  onOpenRealtime,
   onTogglePlayers,
   onLeaveWorld,
 }: GameHeaderProps) {
@@ -52,11 +50,6 @@ export function GameHeader({
           控制台
           {VOICE_ACTIVITY_LABELS[voiceActivity] ?? ''}
         </button>
-        {joined && (
-          <button className="exit-game" onClick={onOpenRealtime}>
-            百炼语音
-          </button>
-        )}
         {joined && (
           <nav className="game-panels" aria-label="游戏面板">
             <button
