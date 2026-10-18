@@ -43,6 +43,12 @@ export function LobbyCard({
       <button className="join-agents" onClick={onCreateAgent}>
         创建 Agent 玩家
       </button>
+      <button
+        className="join-agents"
+        onClick={() => window.open('/ai-school/index.html', '_blank')}
+      >
+        打开 AI 小学版（精致画面）
+      </button>
       <small>同一个共享世界 · 真人与 AI 一起创造</small>
     </div>
   );

@@ -1,0 +1,267 @@
+/* ============================================================
+ * 生存玩法 UI：快捷栏 + 背包/合成弹窗
+ * 移植自「我的世界-AI 小学」源码 62-94（合成界面样式）、
+ * 3455-3484（buildHotbar/refreshHotbar）。
+ * 深色半透明 + 像素风，与 main.css / game-hud.css 的游戏内 HUD 一致。
+ * ============================================================ */
+
+/* ---------- 快捷栏（源码 3455-3484） ---------- */
+.survival-hotbar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.hotbar-name {
+  color: #fff;
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-shadow: 1px 1px 2px #000;
+  min-height: 14px;
+  pointer-events: none;
+}
+
+.survival-hotbar__row {
+  display: flex;
+  gap: 4px;
+}
+
+.survival-slot {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(18, 22, 18, 0.72);
+  border: 2px solid #59665c;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.survival-slot:hover {
+  border-color: #9aa89c;
+}
+
+.survival-slot.sel {
+  border-color: #fff;
+  background: rgba(58, 84, 60, 0.85);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.35);
+}
+
+.survival-slot__num {
+  position: absolute;
+  top: 1px;
+  left: 3px;
+  font-size: 9px;
+  color: #d7ded4;
+  text-shadow: 1px 1px 0 #000;
+}
+
+/* ---------- 图标 + 数量角标 ---------- */
+.survival-icon {
+  position: relative;
+  display: inline-flex;
+  line-height: 0;
+}
+
+.survival-icon canvas {
+  image-rendering: pixelated;
+}
+
+.survival-count {
+  position: absolute;
+  right: 2px;
+  bottom: 0;
+  font-size: 12px;
+  font-weight: bold;
+  color: #fff;
+  text-shadow: 1px 1px 0 #000;
+  line-height: 1;
+}
+
+/* ---------- 背包 / 合成弹窗（源码 62-94） ---------- */
+.survival-dialog {
+  position: fixed;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+}
+
+.survival-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.survival-panel {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(30, 26, 20, 0.95);
+  border: 3px solid #555;
+  border-radius: 8px;
+  padding: 14px 18px;
+  min-width: 420px;
+  color: #eee;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+}
+
+.survival-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.survival-title span {
+  color: #fff;
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.survival-close {
+  background: #c6c6c6;
+  border: 2px solid #888;
+  border-radius: 4px;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.survival-close:hover {
+  background: #fff;
+}
+
+.survival-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.craft-main-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.craft-grid {
+  display: grid;
+  gap: 3px;
+  background: #2a2520;
+  padding: 6px;
+  border-radius: 4px;
+}
+
+.craft-grid.size2 {
+  grid-template-columns: repeat(2, 44px);
+}
+
+.craft-grid.size3 {
+  grid-template-columns: repeat(3, 44px);
+}
+
+.craft-cell {
+  width: 44px;
+  height: 44px;
+  background: #1a1612;
+  border: 2px solid #444;
+  position: relative;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.craft-cell:hover {
+  border-color: #888;
+}
+
+.craft-arrow {
+  color: #aaa;
+  font-size: 28px;
+  font-weight: bold;
+}
+
+.craft-output {
+  width: 56px;
+  height: 56px;
+  background: #1a1612;
+  border: 3px solid #6a6;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.craft-output:hover {
+  border-color: #9f9;
+}
+
+.craft-inv-label {
+  color: #aaa;
+  font-size: 13px;
+  align-self: flex-start;
+  margin-top: 4px;
+}
+
+.craft-inv {
+  display: grid;
+  grid-template-columns: repeat(9, 40px);
+  gap: 3px;
+  background: #2a2520;
+  padding: 6px;
+  border-radius: 4px;
+}
+
+.craft-inv .craft-cell {
+  width: 40px;
+  height: 40px;
+}
+
+.craft-hint {
+  color: #888;
+  font-size: 11px;
+  margin-top: 8px;
+  text-align: center;
+}
+
+/* 跟随鼠标的拿起物 */
+.survival-cursor {
+  position: fixed;
+  transform: translate(-8px, -8px);
+  pointer-events: none;
+  z-index: 100;
+}
+
+@media (max-width: 900px) {
+  .survival-panel {
+    min-width: 0;
+    width: calc(100vw - 32px);
+    padding: 12px;
+  }
+
+  .craft-inv {
+    grid-template-columns: repeat(9, 36px);
+    overflow-x: auto;
+  }
+
+  .craft-inv .craft-cell {
+    width: 36px;
+    height: 36px;
+  }
+}

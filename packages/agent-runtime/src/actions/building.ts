@@ -1,4 +1,4 @@
-import { inBounds, key, distance } from '@voxel/shared';
+import { inBounds, key, distance, MATERIALS } from '@voxel/shared';
 import { setTimeout as pause } from 'node:timers/promises';
 import type {
   Observation,
@@ -19,8 +19,7 @@ export function parsePlannedEdit(value: unknown): PlannedEdit {
   if (
     !inBounds(a) ||
     a.y === 0 ||
-    (a.material !== null &&
-      !['grass', 'dirt', 'stone', 'wood'].includes(a.material))
+    (a.material !== null && !MATERIALS.includes(a.material))
   )
     throw Error('方块参数无效。');
   return { x: a.x, y: a.y, z: a.z, material: a.material };

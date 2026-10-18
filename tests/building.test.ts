@@ -85,7 +85,7 @@ describe('bounded multi-block construction', () => {
     for (const bad of [
       { ...house, width: 8 },
       { ...house, height: 3 },
-      { ...house, x: 11 },
+      { ...house, x: 25 },
       { ...house, material: null },
       { ...house, door: 'bad' },
       { ...house, y: 14 },

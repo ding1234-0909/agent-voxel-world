@@ -1,0 +1,87 @@
+/* ============================================================
+ * 移植自「我的世界-AI 小学」的游戏内 HUD 增强：MC 十字准星 + 小地图
+ * 独立文件，不改动 main.css；配色沿用原版深色半透明 + 白色描边风格。
+ * 参考源码：index.html 第 15-20 行（#crosshair / #minimap / #info）
+ * ============================================================ */
+
+/* ---------- MC 风格十字准星（源码 15-18 行） ---------- */
+.mc-crosshair {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 20px;
+  height: 20px;
+  transform: translate(-50%, -50%);
+  opacity: 0.92;
+  pointer-events: none;
+}
+
+.mc-crosshair__v,
+.mc-crosshair__h {
+  position: absolute;
+  background: #fff;
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.85);
+}
+
+.mc-crosshair__v {
+  left: 9px;
+  width: 2px;
+  height: 6px;
+}
+.mc-crosshair__v--top {
+  top: 0;
+}
+.mc-crosshair__v--bottom {
+  bottom: 0;
+}
+
+.mc-crosshair__h {
+  top: 9px;
+  height: 2px;
+  width: 6px;
+}
+.mc-crosshair__h--left {
+  left: 0;
+}
+.mc-crosshair__h--right {
+  right: 0;
+}
+
+/* ---------- 小地图卡片（源码 20 行 #minimap / 19 行 #info） ---------- */
+.hud-minimap-card {
+  position: absolute;
+  left: 34px;
+  top: 96px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.hud-minimap {
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 10px;
+  background: rgba(8, 12, 18, 0.6);
+  image-rendering: pixelated;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.hud-coords {
+  align-self: flex-start;
+  background: rgba(16, 20, 30, 0.65);
+  color: #dfe7f2;
+  padding: 5px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .hud-minimap-card {
+    left: 16px;
+    top: 84px;
+  }
+}

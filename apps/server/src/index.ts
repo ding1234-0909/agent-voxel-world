@@ -11,6 +11,8 @@ import { installSpeechRoutes } from './routes/speech.routes';
 import { installPresenceRoutes } from './routes/presence.routes';
 import { AgentManager, ProviderStore } from './agent/manager';
 import { installAgentRoutes } from './routes/agent.routes';
+import { installAiChatRoutes } from './routes/ai.routes';
+import { installTtsRoutes } from './routes/tts.routes';
 import { checkStartupDatabase } from './startup';
 import { VoiceServiceStore } from './audio/voice-services';
 import { LocalSpeech } from './audio/local-speech';
@@ -63,6 +65,8 @@ const agents = new AgentManager(
   voiceServices,
 );
 installAgentRoutes(app, agents);
+installAiChatRoutes(app, providers);
+installTtsRoutes(app, voiceServices);
 server.onBeforeShutdown(() => agents.close());
 await server.listen(port, '127.0.0.1');
 const world = await matchMaker.createRoom('world', {});
@@ -83,3 +87,19 @@ installPresenceRoutes(app, () =>
   )?.getPresence(),
 );
 console.log(`Voxel server http://127.0.0.1:${port}`);
+
+// restart-1792225922
+
+// switch-1792226151
+
+// switch2-1792226183
+// revive-1792226532
+// final-1792227174
+// gate-1792227252
+// ai-route-1792227778
+// ai-json-1792227814
+// tts-1792284516
+// afconvert-1792286226
+// male-voice-1792288571
+// terrain-v5-1792292778
+// memory-1792293010

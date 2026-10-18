@@ -1,4 +1,4 @@
-import { inBounds, parseChatRoute, type Material } from '@voxel/shared';
+import { inBounds, parseChatRoute, MATERIALS, type Material } from '@voxel/shared';
 import type { AgentAction } from '../contracts';
 import { parseBuildAction } from './building';
 
@@ -51,7 +51,7 @@ export function parseAction(value: unknown, allowEdits: boolean): AgentAction {
         position.y === 0 ||
         (a.material !== null &&
           (typeof a.material !== 'string' ||
-            !['grass', 'dirt', 'stone', 'wood'].includes(a.material)))
+            !MATERIALS.includes(a.material as Material)))
       )
         return fail();
       return {

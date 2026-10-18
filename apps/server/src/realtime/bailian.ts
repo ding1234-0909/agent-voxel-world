@@ -4,7 +4,7 @@ import {
   REALTIME_LIMITS,
   type RealtimeEvent,
 } from '../../../../packages/shared/src/realtime';
-import { inBounds, type Edit } from '@voxel/shared';
+import { inBounds, MATERIALS, type Edit } from '@voxel/shared';
 
 export interface RealtimeSocket {
   bufferedAmount: number;
@@ -69,7 +69,7 @@ const tools = [
           x: { type: 'integer' },
           y: { type: 'integer' },
           z: { type: 'integer' },
-          material: { enum: ['grass', 'dirt', 'stone', 'wood', null] },
+          material: { enum: [...MATERIALS, null] },
         },
         required: ['x', 'y', 'z', 'material'],
         additionalProperties: false,
@@ -295,7 +295,7 @@ export class BailianSession {
         if (event.name === 'propose_block_edit') {
           if (
             !inBounds(args) ||
-            !['grass', 'dirt', 'stone', 'wood', null].includes(args.material) ||
+            ![...MATERIALS, null].includes(args.material) ||
             Object.keys(args).some(
               (k) => !['x', 'y', 'z', 'material'].includes(k),
             )

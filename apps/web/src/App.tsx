@@ -8,6 +8,11 @@ import { ChatPanel } from './features/chat/ChatPanel';
 import { SpatialVoicePanel } from './features/voice/SpatialVoicePanel';
 import { GameHeader } from './features/hud/GameHeader';
 import { GameFooter } from './features/hud/GameFooter';
+import { InventoryPanel } from './features/survival/InventoryPanel';
+import { Crosshair } from './features/hud/Crosshair';
+import { Minimap } from './features/hud/Minimap';
+import { EnglishTutor } from './features/ai-tutor/EnglishTutor';
+import { unlockTtsAudio } from './graphics/companion';
 import { releasePointerLock } from './utils/pointer-lock';
 
 const savedName = sessionStorage.getItem('voxel-name');
@@ -19,10 +24,11 @@ export function App({ connection }: { connection: Connection }) {
     initialTab?: 'agents';
   } | null>(null);
   const [showControls, setShowControls] = useState(false);
+  const [chatText, setChatText] = useState('');
   const [name, setName] = useState(savedName ?? 'Explorer');
   const [joined, setJoined] = useState(!!savedName);
 
-  const { hostRef, target, material, setMaterial, editBlock, leaveWorldScene } =
+  const { hostRef, target, material, companionSay, voice, setMaterial, editBlock, leaveWorldScene } =
     useWorldScene(connection);
 
   useEffect(() => {
@@ -39,10 +45,14 @@ export function App({ connection }: { connection: Connection }) {
         setActivePanel(null);
         setShowControls(false);
       }
+      // Hold V: speak English to the companions (oral practice).
+      if (event.code === 'KeyV' && joined) {
+        voice.startListening();
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [joined, voice]);
 
   const openConsole = (initialTab?: 'agents') => {
     releasePointerLock();
@@ -57,6 +67,8 @@ export function App({ connection }: { connection: Connection }) {
     setActivePanel(null);
     setJoined(true);
     sessionStorage.setItem('voxel-name', explorerName);
+    // User gesture: unlock audio so companion speech can play.
+    unlockTtsAudio();
     await connection.connect(explorerName);
     return connection.status === 'connected';
   };
@@ -103,9 +115,55 @@ export function App({ connection }: { connection: Connection }) {
 
       {joined && (
         <>
-          <div className="crosshair">+</div>
+          <Crosshair />
           <div className="target">{target}</div>
+          <Minimap connection={connection} />
+          <EnglishTutor />
+          <InventoryPanel />
         </>
+      )}
+      {joined && companionSay && (
+        <div key={companionSay.at} className="companion-bubble">
+          <span className="companion-bubble-name">{companionSay.name}</span>{' '}
+          <span className="companion-bubble-en">{companionSay.en}</span>
+          <div className="companion-bubble-zh">{companionSay.zh}</div>
+        </div>
+      )}
+      {joined && (
+        <div className="voice-chat-hint" data-state={voice.state}>
+          {voice.state === 'listening'
+            ? '正在听你说话…'
+            : voice.state === 'thinking'
+              ? '伙伴正在想…'
+              : voice.state === 'error'
+                ? '没听清或服务不可用，再试一次'
+                : voice.state === 'unsupported'
+                  ? '此浏览器不支持语音识别，可打字练习'
+                  : '按住 V 说英语，或直接打字，和伙伴练口语'}
+        </div>
+      )}
+      {joined && (
+        <form
+          className="oral-input"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const value = chatText.trim();
+            if (!value) return;
+            voice.sendText(value);
+            setChatText('');
+          }}
+        >
+          <input
+            value={chatText}
+            onChange={(e) => setChatText(e.target.value)}
+            placeholder="Type English and press Enter…"
+            spellCheck={false}
+            autoComplete="off"
+          />
+          <button type="submit" disabled={voice.state === 'thinking'}>
+            发送
+          </button>
+        </form>
       )}
 
       <ControlConsole
@@ -124,7 +182,6 @@ export function App({ connection }: { connection: Connection }) {
 
       {joined && (
         <GameFooter
-          material={material}
           isConnected={connection.status === 'connected'}
           showControls={showControls}
           onToggleControls={() => setShowControls((prev) => !prev)}

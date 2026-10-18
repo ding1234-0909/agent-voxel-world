@@ -394,8 +394,12 @@ export class WorldRoom extends Room<WorldState> {
           ? 'scripted-agent'
           : 'human';
     const slot = this.state.players.size;
-    p.x = (slot % 3) - 1;
-    p.z = (Math.floor(slot / 3) % 3) - 1;
+    // Scatter spawns around the world instead of stacking everyone in the
+    // 3x3 centre: golden-angle ring so consecutive joiners are well apart.
+    const angle = slot * 2.399963 + 1.1;
+    const radius = 5 + (slot % 3) * 2;
+    p.x = Math.cos(angle) * radius;
+    p.z = Math.sin(angle) * radius;
     // Spawn above the highest edited cell to avoid trapping new players.
     p.y =
       Math.max(

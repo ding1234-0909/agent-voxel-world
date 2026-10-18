@@ -1,8 +1,8 @@
 import type { Material } from '@voxel/shared';
 import { ControlsHelp } from './ControlsHelp';
+import { Hotbar } from '../survival/Hotbar';
 
 interface GameFooterProps {
-  material: Material;
   isConnected: boolean;
   showControls: boolean;
   onToggleControls: () => void;
@@ -11,10 +11,7 @@ interface GameFooterProps {
   onEditBlock: (place: boolean) => void;
 }
 
-const MATERIALS: Material[] = ['grass', 'dirt', 'stone', 'wood'];
-
 export function GameFooter({
-  material,
   isConnected,
   showControls,
   onToggleControls,
@@ -35,20 +32,10 @@ export function GameFooter({
         </button>
         {showControls && <ControlsHelp onClose={onCloseControls} />}
       </div>
-      <div className="hotbar">
-        {MATERIALS.map((m, i) => (
-          <button
-            key={m}
-            aria-pressed={material === m}
-            onClick={() => onSelectMaterial(m)}
-          >
-            <span className={`swatch ${m}`} />
-            <small>
-              {i + 1} {m}
-            </small>
-          </button>
-        ))}
-      </div>
+
+      {/* 快捷栏：inventory 前 9 格驱动（数字键 1-9 / 滚轮 / 点击切换） */}
+      <Hotbar onSelectMaterial={onSelectMaterial} />
+
       <div className="build-actions">
         <button disabled={!isConnected} onClick={() => onEditBlock(false)}>
           Remove
