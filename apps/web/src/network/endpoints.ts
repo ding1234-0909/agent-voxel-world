@@ -1,5 +1,21 @@
 /** Shared transport addresses; evaluate lazily so previews and tests can override env. */
-export const serverSocketUrl = () =>
-  import.meta.env?.VITE_SERVER_URL ?? 'ws://127.0.0.1:2567';
+const wsProtocol = () =>
+  typeof location !== 'undefined'
+    ? location.protocol === 'https:'
+      ? 'wss'
+      : 'ws'
+    : 'ws';
 
-export const serverHttpUrl = () => serverSocketUrl().replace(/^ws/, 'http');
+/**
+ * Same-origin transport: in production the front-end is served behind one
+ * public origin (e.g. a tunnel), and Vite proxies /colyseus (WS), /tts,
+ * /ai, /chat, /voice, /agents and /world to the game server. External
+ * players never need to know the server address.
+ */
+export const serverSocketUrl = () =>
+  import.meta.env?.VITE_SERVER_URL ??
+  `${wsProtocol()}://${location.host}/colyseus`;
+
+export const serverHttpUrl = () =>
+  import.meta.env?.VITE_SERVER_URL_HTTP ??
+  `${location.protocol}//${location.host}`;
