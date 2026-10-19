@@ -517,7 +517,7 @@ export class WorldRoom extends Room<WorldState> {
     }
     if (farthest < this.extent - 14) return;
     const oldE = this.extent;
-    const newE = oldE + 12;
+    const newE = oldE + 4; // slim ring: ~3k blocks/step instead of 19k+ chunks
     const added: Block[] = [];
     const ring = (minX: number, minZ: number, maxX: number, maxZ: number) =>
       terrainRange(minX, minZ, maxX, maxZ, this.blocks, added);
@@ -528,8 +528,17 @@ export class WorldRoom extends Room<WorldState> {
     ring(-newE, oldE + 1, newE, newE); // north
     this.extent = newE;
     setWorldExtent(this.extent);
-    if (added.length > 0)
-      this.broadcast('extend', { extent: this.extent, blocks: added });
+    if (added.length > 0) {
+      // Chunked broadcast: never hand the client a giant single payload,
+      // which would stall its render thread for hundreds of milliseconds.
+      const CHUNK = 1200;
+      for (let i = 0; i < added.length; i += CHUNK) {
+        this.broadcast('extend', {
+          extent: this.extent,
+          blocks: added.slice(i, i + CHUNK),
+        });
+      }
+    }
   }
   private reply(client: Client, id: string, ok: boolean, error?: string) {
     client.send('result', { id, ok, error, revision: this.state.revision });

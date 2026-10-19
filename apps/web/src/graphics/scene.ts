@@ -42,15 +42,23 @@ const colors: Record<Material, number> = {
 // Shared GPU resources: reused across rebuilds and worlds so block edits never
 // recreate geometry/material (the main source of stutter when editing).
 const blockGeometry = new THREE.BoxGeometry(1, 1, 1);
-// Stable instance capacity: instanceMatrix.array is allocated once and never
-// resized after upload (r180 rejects buffer replacement at render time).
-const INITIAL_CAPACITY = 4096;
 export class WorldScene {
   renderer: THREE.WebGLRenderer;
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(70, 1, 0.1, 150);
-  /** One InstancedMesh per material, reused across rebuilds. */
-  private meshes = new Map<Material, THREE.InstancedMesh>();
+  /**
+   * Chunked instancing: one InstancedMesh per (16×16 chunk, material). Only
+   * chunks within VIEW_RANGE of the player are visible; farther chunks are
+   * unloaded from the scene so the GPU only ever draws the nearby slice of a
+   * world that grows without bound (Minecraft-style draw distance).
+   */
+  static CHUNK = 16;
+  static VIEW_RANGE = 3; // ±3 chunks = 48-block render distance
+  private meshes = new Map<string, THREE.InstancedMesh>();
+  private chunkBlocks = new Map<string, Block[]>();
+  private viewCx = Number.NaN;
+  private viewCz = Number.NaN;
+  private lastVisibilityCheck = 0;
   private avatars = new Map<string, VoxelAvatar>();
   private keys = new Set<string>();
   private yaw = 0;
@@ -197,13 +205,38 @@ export class WorldScene {
       this.rebuild();
     }, 40);
   };
-  /** Update instanced data in place; meshes are created once per material. */
+  /** Update instanced data in place; meshes are created once per chunk+material. */
   rebuild = () => {
-    for (const material of Object.keys(colors) as Material[]) {
-      const blocks = [...this.connection.blocks.values()].filter(
-        (b) => b.material === material,
-      );
-      this.rebuildMaterial(material, blocks);
+    // Rebuild the chunk index, then write every chunk's instanced meshes.
+    this.chunkBlocks.clear();
+    for (const b of this.connection.blocks.values()) {
+      const k = `${Math.floor(b.x / WorldScene.CHUNK)},${Math.floor(b.z / WorldScene.CHUNK)}`;
+      let arr = this.chunkBlocks.get(k);
+      if (!arr) {
+        arr = [];
+        this.chunkBlocks.set(k, arr);
+      }
+      arr.push(b);
+    }
+    for (const [ck, blocks] of this.chunkBlocks) {
+      const byMaterial = new Map<Material, Block[]>();
+      for (const b of blocks) {
+        const arr = byMaterial.get(b.material) ?? [];
+        arr.push(b);
+        byMaterial.set(b.material, arr);
+      }
+      for (const [material, arr] of byMaterial) this.writeChunk(ck, material, arr);
+    }
+    // Drop meshes for chunks that no longer exist (e.g. after edits cleared a chunk).
+    const stale: string[] = [];
+    for (const key of this.meshes.keys()) {
+      const ck = key.slice(0, key.lastIndexOf(':'));
+      if (!this.chunkBlocks.has(ck)) stale.push(key);
+    }
+    for (const key of stale) {
+      const mesh = this.meshes.get(key);
+      if (mesh) this.scene.remove(mesh);
+      this.meshes.delete(key);
     }
     // Resolve optimistic edits against the authoritative block map, then build
     // deterministic foliage once the first snapshot has arrived.
@@ -215,16 +248,13 @@ export class WorldScene {
     // Keep the school sign seated on the ACTUAL terrain, not the procedural
     // height function, so it never floats after world edits.
     this.sign?.setGround(this.connection.blocks);
+    const self = this.connection.self;
+    if (self) this.updateVisibility(self.x, self.z);
   };
-  /** (Re)build a single material's InstancedMesh from the given blocks. */
-  private rebuildMaterial(material: Material, blocks: Block[]) {
-    let mesh = this.meshes.get(material);
-    const capacity = mesh ? mesh.instanceMatrix.count : 0;
-    if (!mesh || blocks.length > capacity) {
-      // Photos arrive asynchronously; each material piece sets
-      // needsUpdate on arrival, so the InstancedMesh is never rebuilt for maps.
-      // A fixed capacity avoids replacing instanceMatrix.array (illegal after
-      // upload in r180); only recreate if the capacity is genuinely exhausted.
+  /** (Re)build a single chunk-material InstancedMesh from its blocks. */
+  private writeChunk(chunkKey: string, material: Material, blocks: Block[]) {
+    let mesh = this.meshes.get(chunkKey + ':' + material);
+    if (!mesh || blocks.length > mesh.instanceMatrix.count) {
       if (mesh) this.scene.remove(mesh);
       const bundle = blockMaterialBundle(
         material,
@@ -233,12 +263,13 @@ export class WorldScene {
       mesh = new THREE.InstancedMesh(
         blockGeometry,
         bundle.material,
-        Math.max(blocks.length * 2 + 16, INITIAL_CAPACITY),
+        Math.max(blocks.length * 2 + 16, 1024),
       );
       mesh.castShadow = true;
       mesh.receiveShadow = true;
-      this.meshes.set(material, mesh);
+      this.meshes.set(chunkKey + ':' + material, mesh);
       this.scene.add(mesh);
+      mesh.visible = false; // visibility is (re)applied by updateVisibility
     }
     mesh.count = blocks.length;
     for (let i = 0; i < blocks.length; i++) {
@@ -266,24 +297,39 @@ export class WorldScene {
   }
   /**
    * Incremental render for streamed terrain: append newly generated blocks to
-   * the existing InstancedMesh instead of rebuilding the whole world, so the
-   * frame cost of walking to the edge stays small as the world grows.
+   * the owning chunk's InstancedMesh instead of rebuilding the whole world, so
+   * the frame cost of walking to the edge stays small as the world grows.
    */
   addBlocks = (added: Block[]) => {
     if (added.length === 0) return;
-    const all = this.connection.blocks;
-    const byMaterial = new Map<Material, Block[]>();
     for (const b of added) {
-      const arr = byMaterial.get(b.material) ?? [];
+      const k = `${Math.floor(b.x / WorldScene.CHUNK)},${Math.floor(b.z / WorldScene.CHUNK)}`;
+      let arr = this.chunkBlocks.get(k);
+      if (!arr) {
+        arr = [];
+        this.chunkBlocks.set(k, arr);
+      }
       arr.push(b);
-      byMaterial.set(b.material, arr);
     }
-    for (const [material, arr] of byMaterial) {
-      let mesh = this.meshes.get(material);
+    const byChunkMaterial = new Map<string, Block[]>();
+    for (const b of added) {
+      const ck = `${Math.floor(b.x / WorldScene.CHUNK)},${Math.floor(b.z / WorldScene.CHUNK)}`;
+      const key = `${ck}:${b.material}`;
+      const arr = byChunkMaterial.get(key) ?? [];
+      arr.push(b);
+      byChunkMaterial.set(key, arr);
+    }
+    for (const [key, arr] of byChunkMaterial) {
+      const sep = key.lastIndexOf(':');
+      const ck = key.slice(0, sep);
+      const material = key.slice(sep + 1) as Material;
+      let mesh = this.meshes.get(key);
       if (!mesh || mesh.count + arr.length > mesh.instanceMatrix.count) {
-        // Capacity exhausted (rare): rebuild just this material.
-        const blocks = [...all.values()].filter((b) => b.material === material);
-        this.rebuildMaterial(material, blocks);
+        // Capacity exhausted (rare): rebuild just this chunk-material.
+        const blocks =
+          this.chunkBlocks.get(ck)?.filter((b) => b.material === material) ??
+          [];
+        this.writeChunk(ck, material, blocks);
         continue;
       }
       for (const b of arr) {
@@ -305,7 +351,41 @@ export class WorldScene {
       mesh.userData.blocks = prev ? prev.concat(arr) : arr;
       mesh.computeBoundingSphere();
     }
+    const self = this.connection.self;
+    if (self) this.updateVisibility(self.x, self.z);
   };
+  /**
+   * Minecraft-style draw distance: show chunks within VIEW_RANGE of the
+   * player, hide the rest, and fully unload far chunks (keeps the scene graph
+   * and GPU load flat as the world grows).
+   */
+  private updateVisibility(px: number, pz: number) {
+    const pcx = Math.floor(px / WorldScene.CHUNK);
+    const pcz = Math.floor(pz / WorldScene.CHUNK);
+    if (pcx === this.viewCx && pcz === this.viewCz) return;
+    this.viewCx = pcx;
+    this.viewCz = pcz;
+    const toUnload: string[] = [];
+    for (const [key, mesh] of this.meshes) {
+      const sep = key.lastIndexOf(':');
+      const [cx, cz] = key
+        .slice(0, sep)
+        .split(',')
+        .map(Number) as [number, number];
+      const dist = Math.max(Math.abs(cx - pcx), Math.abs(cz - pcz));
+      if (dist <= WorldScene.VIEW_RANGE) {
+        mesh.visible = true;
+      } else {
+        mesh.visible = false;
+        if (dist > WorldScene.VIEW_RANGE + 1) toUnload.push(key);
+      }
+    }
+    for (const key of toUnload) {
+      const mesh = this.meshes.get(key);
+      if (mesh) this.scene.remove(mesh);
+      this.meshes.delete(key);
+    }
+  }
   /**
    * Confirm optimistic edits after a server broadcast rebuild: a break is
    * confirmed once the cell is gone (then spawn its drop); a place once the
@@ -478,6 +558,12 @@ export class WorldScene {
     this.last = time;
     const self = this.connection.self;
     if (self) {
+      // Streamed terrain draw distance: refresh visible chunks as the player
+      // moves (throttled; updateVisibility no-ops unless the chunk changed).
+      if (time - this.lastVisibilityCheck > 300) {
+        this.lastVisibilityCheck = time;
+        this.updateVisibility(self.x, self.z);
+      }
       // Spawn the companion team once we have a world position. Three helpers
       // with distinct roles orbit the player at different angles/distances.
       if (!this.companionsCreated) {

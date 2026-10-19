@@ -40,6 +40,10 @@ export default defineConfig({
   preview: {
     port: 5173,
     strictPort: true,
+    // Public tunnels (e.g. cloudflared trycloudflare.com) send unknown Host
+    // headers; allow them so remote players can reach the game.
+    host: '0.0.0.0',
+    allowedHosts: true,
     proxy: gameProxy,
   },
 });

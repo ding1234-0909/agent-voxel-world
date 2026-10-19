@@ -372,7 +372,7 @@ export function simulate(
     }
   }
   if (input.jump && body.grounded) {
-    body.vy = 8.2; // ~1.6-block hop, closer to Minecraft feel for climbing bumps
+    body.vy = 9; // ~2-block hop: hops over slim tree trunks, closer to Minecraft
     body.grounded = false;
   }
   body.vy = Math.max(-20, body.vy - 20 * dt);
