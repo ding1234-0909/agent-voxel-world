@@ -3,6 +3,7 @@ import type { RealtimeEvent } from '../../../../packages/shared/src/realtime';
 import { Client, type Room } from 'colyseus.js';
 import {
   key,
+  LIMIT,
   type Block,
   type Player,
   type Snapshot,
@@ -18,6 +19,8 @@ export class Connection {
   revision = 0;
   status = 'lobby';
   persistence = 'memory';
+  /** Current world half-extent; the server grows it as players roam. */
+  extent = LIMIT;
   messages: string[] = [];
   chats: ChatEntry[] = [];
   chatToken = '';
@@ -66,6 +69,8 @@ export class Connection {
   }
   onChange = () => {};
   onBlocks = () => {};
+  /** Streamed terrain arrived; render it incrementally. */
+  onExtend = (e: { extent: number; blocks: Block[] }) => {};
   onVoice = (value: unknown) => {};
   onRealtime: (value: RealtimeEvent) => void = () => {};
   onRealtimeReset = () => {};
@@ -120,7 +125,17 @@ export class Connection {
         this.blocks = new Map(s.blocks.map((b) => [key(b), b]));
         this.revision = s.revision;
         this.persistence = s.persistence;
+        if (typeof s.extent === 'number' && s.extent >= LIMIT)
+          this.extent = s.extent;
         this.onBlocks();
+        this.onChange();
+      });
+      room.onMessage('extend', (e: { extent: number; blocks: Block[] }) => {
+        if (!activeRoom()) return;
+        if (typeof e.extent === 'number' && e.extent >= LIMIT)
+          this.extent = e.extent;
+        for (const b of e.blocks) this.blocks.set(key(b), b);
+        this.onExtend(e);
         this.onChange();
       });
       room.onMessage('edit', (e: Edit) => {

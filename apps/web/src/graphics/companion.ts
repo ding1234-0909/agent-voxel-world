@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { key, LIMIT, type Block, type Material } from '@voxel/shared';
+import { key, type Block, type Material } from '@voxel/shared';
 import { VoxelAvatar } from './avatar';
 import { STEVE_PALETTE, ALEX_PALETTE, SAM_PALETTE } from './mc-skin';
 import type { Connection } from '../network/connection';
@@ -351,7 +351,8 @@ export class Companion {
       speed = Math.min(3.2, dist * 1.6);
       const nx = a.position.x + (dx / dist) * speed * dt;
       const nz = a.position.z + (dz / dist) * speed * dt;
-      if (nx > -LIMIT + 0.5 && nx < LIMIT - 0.5 && nz > -LIMIT + 0.5 && nz < LIMIT - 0.5) {
+      const E = this.connection.extent;
+      if (nx > -E + 0.5 && nx < E - 0.5 && nz > -E + 0.5 && nz < E - 0.5) {
         const nbx = Math.floor(nx);
         const nbz = Math.floor(nz);
         const my = Math.floor(a.position.y);
@@ -415,13 +416,14 @@ export class Companion {
     const blocks = this.connection.blocks;
     const target = this.connection.self;
     if (!target) return;
+    const E = this.connection.extent;
     // Pick a random free cell 2-5 blocks away around the player.
     for (let attempt = 0; attempt < 8; attempt++) {
       const angle = Math.random() * Math.PI * 2;
       const radius = 2 + Math.random() * 3;
       const px = Math.round(target.x + Math.cos(angle) * radius);
       const pz = Math.round(target.z + Math.sin(angle) * radius);
-      if (px < -LIMIT + 1 || px > LIMIT - 1 || pz < -LIMIT + 1 || pz > LIMIT - 1) continue;
+      if (px < -E + 1 || px > E - 1 || pz < -E + 1 || pz > E - 1) continue;
       const gy = Companion.groundY(blocks, px + 0.5, pz + 0.5);
       const y1 = gy + 1;
       if (blocks.has(key({ x: px, y: y1, z: pz }))) continue;

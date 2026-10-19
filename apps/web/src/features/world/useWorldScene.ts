@@ -20,7 +20,8 @@ export function useWorldScene(connection: Connection) {
     if (!hostRef.current) return;
     const world = new WorldScene(hostRef.current, connection);
     sceneRef.current = world;
-    connection.onBlocks = world.rebuild;
+    connection.onBlocks = world.scheduleRebuild;
+    connection.onExtend = (e) => world.addBlocks(e.blocks);
     world.onTarget = setTarget;
     world.onCompanionSay = (en, zh, name) =>
       setCompanionSay({ name, en, zh, at: performance.now() });

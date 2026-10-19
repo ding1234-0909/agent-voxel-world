@@ -1,16 +1,15 @@
 import { useEffect, useRef } from 'react';
-import { LIMIT, type Material, type Player } from '@voxel/shared';
+import { type Material, type Player } from '@voxel/shared';
 import type { Connection } from '../../network/connection';
 
 /**
  * 俯视小地图（参考原版 index.html 第 3552-3638 行 updateMinimap / mmColor）。
- * 原版以玩家为中心旋转地图；本世界固定为 (-LIMIT..LIMIT)²，
+ * 原版以玩家为中心旋转地图；本世界为流式世界（extent 随行走增长），
  * 这里采用固定北向上（-z 朝上），直接读取 connection.blocks 的最高方块上色，
- * 自身用白色箭头按 yaw 朝向绘制，其他在线玩家用蓝点表示。
- * 数据源全部来自 Connection，不依赖 3D 场景，rAF 刷新。
+ * 画幅跟随 connection.extent 动态缩放，自身用白色箭头按 yaw 朝向绘制，
+ * 其他在线玩家用蓝点表示。数据源全部来自 Connection，不依赖 3D 场景，rAF 刷新。
  */
 
-const CELLS = LIMIT * 2 + 1; // 49 when LIMIT = 24
 const CANVAS_SIZE = 200;
 const PIXEL_RATIO = 2;
 
@@ -26,6 +25,8 @@ const MATERIAL_COLORS: Record<Material, [number, number, number]> = {
   brick: [155, 60, 45],
   workbench: [138, 106, 58],
   water: [63, 127, 217],
+  snow: [242, 247, 251],
+  ice: [159, 212, 232],
 };
 const EMPTY_COLOR: [number, number, number] = [12, 14, 20];
 
@@ -37,8 +38,11 @@ function paint(
   ctx: CanvasRenderingContext2D,
   connection: Connection,
   size: number,
-  cell: number,
 ) {
+  // 画幅跟随流式世界：extent 增长时小地图整体缩放显示更大范围。
+  const extent = connection.extent;
+  const cells = extent * 2 + 1;
+  const cell = size / cells;
   // 收集每一列最高的方块（俯视只画顶面）
   const top = new Map<string, { y: number; material: Material }>();
   for (const block of connection.blocks.values()) {
@@ -48,10 +52,10 @@ function paint(
   }
 
   ctx.clearRect(0, 0, size, size);
-  for (let ix = 0; ix < CELLS; ix++) {
-    for (let iz = 0; iz < CELLS; iz++) {
-      const wx = -LIMIT + ix;
-      const wz = -LIMIT + iz;
+  for (let ix = 0; ix < cells; ix++) {
+    for (let iz = 0; iz < cells; iz++) {
+      const wx = -extent + ix;
+      const wz = -extent + iz;
       const entry = top.get(`${wx},${wz}`);
       const color = entry ? MATERIAL_COLORS[entry.material] : EMPTY_COLOR;
       ctx.fillStyle = `rgb(${color[0]},${color[1]},${color[2]})`;
@@ -65,8 +69,8 @@ function paint(
   ctx.strokeRect(0, 0, size, size);
 
   const toCanvas = (x: number, z: number) => ({
-    cx: ((x + LIMIT) / CELLS) * size,
-    cz: ((z + LIMIT) / CELLS) * size,
+    cx: ((x + extent) / cells) * size,
+    cz: ((z + extent) / cells) * size,
   });
 
   // 其他在线玩家：蓝点
@@ -107,11 +111,7 @@ function paint(
 
 export function Minimap({ connection }: MinimapProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const geoRef = useRef<{
-    ctx: CanvasRenderingContext2D;
-    size: number;
-    cell: number;
-  } | null>(null);
+  const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -122,21 +122,20 @@ export function Minimap({ connection }: MinimapProps) {
     const size = CANVAS_SIZE * PIXEL_RATIO;
     canvas.width = size;
     canvas.height = size;
-    const cell = size / CELLS;
-    geoRef.current = { ctx, size, cell };
+    ctxRef.current = ctx;
 
     let raf = 0;
     const draw = () => {
       raf = requestAnimationFrame(draw);
       try {
-        paint(ctx, connection, size, cell);
+        paint(ctx, connection, size);
       } catch {
         /* 单帧绘制失败不中断循环 */
       }
     };
 
     // 立即先画一帧，避免 rAF 未调度时地图空白
-    paint(ctx, connection, size, cell);
+    paint(ctx, connection, size);
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
   }, [connection]);
@@ -144,10 +143,10 @@ export function Minimap({ connection }: MinimapProps) {
   // 每次渲染兜底重绘：connection.onChange 触发 App 重渲染时同步刷新地图，
   // 不完全依赖 rAF（部分自动化/省电环境 rAF 可能停摆）。
   useEffect(() => {
-    const geo = geoRef.current;
-    if (!geo) return;
+    const ctx = ctxRef.current;
+    if (!ctx) return;
     try {
-      paint(geo.ctx, connection, geo.size, geo.cell);
+      paint(ctx, connection, CANVAS_SIZE * PIXEL_RATIO);
     } catch {
       /* ignore */
     }

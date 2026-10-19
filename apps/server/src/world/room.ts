@@ -9,6 +9,7 @@ import { Room, Client } from '@colyseus/core';
 import { Schema, MapSchema, defineTypes } from '@colyseus/schema';
 import {
   terrain,
+  terrainRange,
   key,
   simulate,
   validateEdit,
@@ -16,6 +17,8 @@ import {
   distance,
   WORLD_ID,
   visibleEvent,
+  LIMIT,
+  setWorldExtent,
   type ChatData,
   type WorldPresence,
   type Block,
@@ -77,6 +80,9 @@ export class WorldRoom extends Room<WorldState> {
   );
   blocks = terrain();
   store = new WorldStore();
+  /** Current generated world half-extent; grows outward as players roam. */
+  extent = LIMIT;
+  private expandTimer = 0;
   private bodies = new Map<
     string,
     { vy: number; grounded: boolean; input: Input; lastInput: number }
@@ -127,6 +133,7 @@ export class WorldRoom extends Room<WorldState> {
       throw error;
     }
     this.setPatchRate(50);
+    setWorldExtent(this.extent);
     this.onMessage('sync', (client) => {
       if (this.allow(client)) this.snapshot(client);
     });
@@ -358,6 +365,11 @@ export class WorldRoom extends Room<WorldState> {
     });
     this.setSimulationInterval((delta) => {
       const dt = Math.min(delta / 1000, 0.05);
+      this.expandTimer += delta;
+      if (this.expandTimer >= 600) {
+        this.expandTimer = 0;
+        this.expandIfNeeded();
+      }
       for (const [id, body] of this.bodies) {
         const p = this.state.players.get(id);
         if (!p?.connected) continue;
@@ -487,7 +499,37 @@ export class WorldRoom extends Room<WorldState> {
       blocks: [...this.blocks.values()],
       revision: this.state.revision,
       persistence: this.store.mode,
+      extent: this.extent,
     });
+  }
+  /**
+   * Infinite-world streaming: when a connected player approaches the edge,
+   * generate one more ring of deterministic terrain around the whole world,
+   * insert it, and broadcast the added blocks so clients can render them
+   * without waiting for a full snapshot.
+   */
+  private expandIfNeeded() {
+    let farthest = 0;
+    for (const player of this.state.players.values()) {
+      if (!player.connected) continue;
+      const far = Math.max(Math.abs(player.x), Math.abs(player.z));
+      if (far > farthest) farthest = far;
+    }
+    if (farthest < this.extent - 14) return;
+    const oldE = this.extent;
+    const newE = oldE + 12;
+    const added: Block[] = [];
+    const ring = (minX: number, minZ: number, maxX: number, maxZ: number) =>
+      terrainRange(minX, minZ, maxX, maxZ, this.blocks, added);
+    // Four strips around the previous square keep the ring non-overlapping.
+    ring(-newE, -newE, -oldE - 1, newE); // west
+    ring(oldE + 1, -newE, newE, newE); // east
+    ring(-newE, -newE, newE, -oldE - 1); // south
+    ring(-newE, oldE + 1, newE, newE); // north
+    this.extent = newE;
+    setWorldExtent(this.extent);
+    if (added.length > 0)
+      this.broadcast('extend', { extent: this.extent, blocks: added });
   }
   private reply(client: Client, id: string, ok: boolean, error?: string) {
     client.send('result', { id, ok, error, revision: this.state.revision });

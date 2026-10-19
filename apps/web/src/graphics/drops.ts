@@ -14,7 +14,11 @@ import { blockMaterialBundle } from './block-materials';
 
 /** Which inventory item id a broken block yields (stone → cobble; water drops nothing). */
 export const dropForBreak = (m: Material): ItemId | null =>
-  m === 'stone' ? 'cobble' : m === 'water' ? null : m;
+  m === 'stone'
+    ? 'cobble'
+    : m === 'water' || m === 'snow' || m === 'ice'
+      ? null
+      : m;
 
 const DROP_SIZE = 0.28;
 const GRAVITY = 22;

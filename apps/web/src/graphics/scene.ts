@@ -36,6 +36,8 @@ const colors: Record<Material, number> = {
   brick: 0x9b3c2d,
   workbench: 0x8a6a3a,
   water: 0x3f7fd9,
+  snow: 0xf2f7fb,
+  ice: 0x9fd4e8,
 };
 // Shared GPU resources: reused across rebuilds and worlds so block edits never
 // recreate geometry/material (the main source of stutter when editing).
@@ -201,51 +203,7 @@ export class WorldScene {
       const blocks = [...this.connection.blocks.values()].filter(
         (b) => b.material === material,
       );
-      let mesh = this.meshes.get(material);
-      const capacity = mesh ? mesh.instanceMatrix.count : 0;
-      if (!mesh || blocks.length > capacity) {
-        // Photos arrive asynchronously; each material piece sets
-        // needsUpdate on arrival, so the InstancedMesh is never rebuilt for maps.
-        // A fixed capacity avoids replacing instanceMatrix.array (illegal after
-        // upload in r180); only recreate if the capacity is genuinely exhausted.
-        if (mesh) this.scene.remove(mesh);
-        const bundle = blockMaterialBundle(
-          material,
-          this.renderer.capabilities.getMaxAnisotropy(),
-        );
-        mesh = new THREE.InstancedMesh(
-          blockGeometry,
-          bundle.material,
-          Math.max(blocks.length * 2 + 16, INITIAL_CAPACITY),
-        );
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
-        this.meshes.set(material, mesh);
-        this.scene.add(mesh);
-      }
-      mesh.count = blocks.length;
-      for (let i = 0; i < blocks.length; i++) {
-        const b = blocks[i]!;
-        this.tmpMatrix.makeTranslation(b.x, b.y, b.z);
-        mesh.setMatrixAt(i, this.tmpMatrix);
-      }
-      mesh.instanceMatrix.needsUpdate = true;
-      // Minecraft leaves look natural with per-block shade variation. Three.js
-      // multiplies instanceColor by the material color, so shade around 1.0.
-      if (material === 'leaves') {
-        if (!mesh.instanceColor) mesh.setColorAt(0, this.tmpColor);
-        for (let i = 0; i < blocks.length; i++) {
-          const b = blocks[i]!;
-          const shade =
-            0.82 +
-            (((b.x * 7919 + b.y * 104729 + b.z * 131071) % 997) / 997) * 0.26;
-          this.tmpColor.setRGB(shade, shade * 1.02, shade * 0.92);
-          mesh.setColorAt(i, this.tmpColor);
-        }
-        if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-      }
-      mesh.userData.blocks = blocks;
-      mesh.computeBoundingSphere();
+      this.rebuildMaterial(material, blocks);
     }
     // Resolve optimistic edits against the authoritative block map, then build
     // deterministic foliage once the first snapshot has arrived.
@@ -257,6 +215,96 @@ export class WorldScene {
     // Keep the school sign seated on the ACTUAL terrain, not the procedural
     // height function, so it never floats after world edits.
     this.sign?.setGround(this.connection.blocks);
+  };
+  /** (Re)build a single material's InstancedMesh from the given blocks. */
+  private rebuildMaterial(material: Material, blocks: Block[]) {
+    let mesh = this.meshes.get(material);
+    const capacity = mesh ? mesh.instanceMatrix.count : 0;
+    if (!mesh || blocks.length > capacity) {
+      // Photos arrive asynchronously; each material piece sets
+      // needsUpdate on arrival, so the InstancedMesh is never rebuilt for maps.
+      // A fixed capacity avoids replacing instanceMatrix.array (illegal after
+      // upload in r180); only recreate if the capacity is genuinely exhausted.
+      if (mesh) this.scene.remove(mesh);
+      const bundle = blockMaterialBundle(
+        material,
+        this.renderer.capabilities.getMaxAnisotropy(),
+      );
+      mesh = new THREE.InstancedMesh(
+        blockGeometry,
+        bundle.material,
+        Math.max(blocks.length * 2 + 16, INITIAL_CAPACITY),
+      );
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      this.meshes.set(material, mesh);
+      this.scene.add(mesh);
+    }
+    mesh.count = blocks.length;
+    for (let i = 0; i < blocks.length; i++) {
+      const b = blocks[i]!;
+      this.tmpMatrix.makeTranslation(b.x, b.y, b.z);
+      mesh.setMatrixAt(i, this.tmpMatrix);
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+    // Minecraft leaves look natural with per-block shade variation. Three.js
+    // multiplies instanceColor by the material color, so shade around 1.0.
+    if (material === 'leaves') {
+      if (!mesh.instanceColor) mesh.setColorAt(0, this.tmpColor);
+      for (let i = 0; i < blocks.length; i++) {
+        const b = blocks[i]!;
+        const shade =
+          0.82 +
+          (((b.x * 7919 + b.y * 104729 + b.z * 131071) % 997) / 997) * 0.26;
+        this.tmpColor.setRGB(shade, shade * 1.02, shade * 0.92);
+        mesh.setColorAt(i, this.tmpColor);
+      }
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    }
+    mesh.userData.blocks = blocks;
+    mesh.computeBoundingSphere();
+  }
+  /**
+   * Incremental render for streamed terrain: append newly generated blocks to
+   * the existing InstancedMesh instead of rebuilding the whole world, so the
+   * frame cost of walking to the edge stays small as the world grows.
+   */
+  addBlocks = (added: Block[]) => {
+    if (added.length === 0) return;
+    const all = this.connection.blocks;
+    const byMaterial = new Map<Material, Block[]>();
+    for (const b of added) {
+      const arr = byMaterial.get(b.material) ?? [];
+      arr.push(b);
+      byMaterial.set(b.material, arr);
+    }
+    for (const [material, arr] of byMaterial) {
+      let mesh = this.meshes.get(material);
+      if (!mesh || mesh.count + arr.length > mesh.instanceMatrix.count) {
+        // Capacity exhausted (rare): rebuild just this material.
+        const blocks = [...all.values()].filter((b) => b.material === material);
+        this.rebuildMaterial(material, blocks);
+        continue;
+      }
+      for (const b of arr) {
+        this.tmpMatrix.makeTranslation(b.x, b.y, b.z);
+        mesh.setMatrixAt(mesh.count, this.tmpMatrix);
+        if (material === 'leaves') {
+          const shade =
+            0.82 +
+            (((b.x * 7919 + b.y * 104729 + b.z * 131071) % 997) / 997) * 0.26;
+          this.tmpColor.setRGB(shade, shade * 1.02, shade * 0.92);
+          mesh.setColorAt(mesh.count, this.tmpColor);
+        }
+        mesh.count++;
+      }
+      mesh.instanceMatrix.needsUpdate = true;
+      if (material === 'leaves' && mesh.instanceColor)
+        mesh.instanceColor.needsUpdate = true;
+      const prev = mesh.userData.blocks as Block[] | undefined;
+      mesh.userData.blocks = prev ? prev.concat(arr) : arr;
+      mesh.computeBoundingSphere();
+    }
   };
   /**
    * Confirm optimistic edits after a server broadcast rebuild: a break is

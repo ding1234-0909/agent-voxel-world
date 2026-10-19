@@ -20,6 +20,8 @@ const fallbackColor: Record<Material, number> = {
   brick: 0x9b3c2d,
   workbench: 0x8a6a3a,
   water: 0x3f7fd9,
+  snow: 0xf2f7fb,
+  ice: 0x9fd4e8,
 };
 
 // Photo assets in /public/textures. wood (log) keeps bark.jpg; workbench has no

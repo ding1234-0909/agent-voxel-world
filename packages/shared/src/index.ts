@@ -11,7 +11,7 @@ export type {
   ManagedAgentView,
 } from './agents';
 export const PROTOCOL_VERSION = 1;
-export const LIMIT = 24;
+export const LIMIT = 36;
 export const MAX_Y = 15;
 export const REACH = 6;
 export type Material =
@@ -25,7 +25,9 @@ export type Material =
   | 'leaves'
   | 'brick'
   | 'workbench'
-  | 'water';
+  | 'water'
+  | 'snow'
+  | 'ice';
 /** All server-valid placeable materials (single source of truth). */
 export const MATERIALS: Material[] = [
   'grass',
@@ -38,6 +40,8 @@ export const MATERIALS: Material[] = [
   'leaves',
   'brick',
   'workbench',
+  'snow',
+  'ice',
 ];
 export type Vec3 = { x: number; y: number; z: number };
 export type Block = Vec3 & { material: Material };
@@ -66,6 +70,7 @@ export type Snapshot = {
   blocks: Block[];
   revision: number;
   persistence: string;
+  extent?: number;
 };
 export type WorldEvent = {
   actorKind?: string;
@@ -78,12 +83,22 @@ export type WorldEvent = {
 export const key = (p: Vec3) => `${p.x},${p.y},${p.z}`;
 export const distance = (a: Vec3, b: Vec3) =>
   Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+/**
+ * Runtime world extent: starts at LIMIT and grows as the server streams new
+ * terrain around players ("walk anywhere, the world generates under you").
+ * Server and client keep their own copies; the server extends its copy first,
+ * then broadcasts the new extent so clients stay in sync.
+ */
+export let WORLD_EXTENT = LIMIT;
+export const setWorldExtent = (value: number) => {
+  WORLD_EXTENT = Math.max(LIMIT, Math.floor(value));
+};
 export const inBounds = (p: Vec3) =>
   Number.isInteger(p.x) &&
   Number.isInteger(p.y) &&
   Number.isInteger(p.z) &&
-  Math.abs(p.x) <= LIMIT &&
-  Math.abs(p.z) <= LIMIT &&
+  Math.abs(p.x) <= WORLD_EXTENT &&
+  Math.abs(p.z) <= WORLD_EXTENT &&
   p.y >= 0 &&
   p.y <= MAX_Y;
 /** Deterministic 2D value noise (bilinear-interpolated hashes), 0..1. */
@@ -108,38 +123,76 @@ function noise2(x: number, z: number): number {
 }
 
 /**
- * Terrain height: a flat safe-spawn plateau in the middle, gentle Minecraft-like
- * plains with rolling hills, one low lake basin (filled with water in terrain()),
- * and soft stone hills where a second noise field crosses a threshold. Everything
- * is deterministic so server and every client agree. Max height stays below
- * MAX_Y (15).
+ * Biomes: deterministic, seed-like noise fields so server and every client
+ * agree. Walking far in any direction streams new terrain with variety —
+ * snowy tundra, tall mountains, winding rivers, deserts, lakes and plains.
+ */
+export type Biome =
+  | 'plains'
+  | 'hills'
+  | 'mountains'
+  | 'tundra'
+  | 'river'
+  | 'lake'
+  | 'desert';
+
+export function biomeAt(x: number, z: number): Biome {
+  // Wide open spawn meadow so players can always walk out; mountains wait
+  // further away and are easy to go around.
+  if (Math.abs(x) < 8 && Math.abs(z) < 8) return 'plains';
+  // Snowy tundra: a broad low-frequency climate field.
+  if (noise2(x / 15 + 5.7, z / 15 + 3.1) < 0.2) return 'tundra';
+  // Tall mountains: rare, high-amplitude field.
+  if (noise2(x / 13, z / 13) > 0.74) return 'mountains';
+  // Winding river: thin threshold band of a displaced field.
+  if (noise2(x / 8 + 9.1, z / 8 + 6.3) < 0.1) return 'river';
+  // Lake basin: existing low-frequency dip.
+  const plains = 2 + Math.round(noise2(x / 8.5, z / 8.5) * 3);
+  if (noise2(x / 6.5, z / 6.5) < 0.18 && plains <= 3) return 'lake';
+  // Sandy desert flats.
+  if (noise2(x / 9, z / 9) < 0.2) return 'desert';
+  // Soft rounded stone hills.
+  if (noise2(x / 11, z / 11) > 0.74) return 'hills';
+  return 'plains';
+}
+
+/**
+ * Terrain height by biome, 0..15, deterministic. Spawn stays a flat plateau;
+ * mountains can reach MAX_Y, rivers dig down to y=0 (water on top).
  */
 export const height = (x: number, z: number) => {
-  if (Math.abs(x) < 4 && Math.abs(z) < 4) return 2; // safe spawn plateau
-  // Gentle plains: low-frequency rolling hills, 2..5 high.
+  if (Math.abs(x) < 8 && Math.abs(z) < 8) return 2; // safe open spawn meadow
+  const b = biomeAt(x, z);
+  // All biomes share a gentle, continuous elevation band (1..7) so biome
+  // borders never form unclimbable cliffs: hills roll up, mountains grow
+  // from the same ground level the way real terrain does.
+  if (b === 'tundra') return 2 + Math.round(noise2(x / 9, z / 9) * 2); // 2..4 snow field
+  if (b === 'mountains') {
+    const mtn = noise2(x / 13, z / 13);
+    return Math.min(7, 2 + Math.round((mtn - 0.74) * 20)); // foothills 2 → peaks 7
+  }
+  if (b === 'river') return 1; // shallow river bed (water on top at y=2)
+  if (b === 'lake') return 1;
+  if (b === 'desert') return 2 + Math.round(noise2(x / 9, z / 9) * 2); // 2..4 sand dunes
   const roll = noise2(x / 8.5, z / 8.5);
-  const plains = 2 + Math.round(roll * 3);
-  // Soft stone hills: rare and rounded, peak ~9.
-  const mtn = noise2(x / 11, z / 11);
-  if (mtn > 0.74) return Math.min(9, 3 + Math.round((mtn - 0.74) * 22));
-  // Lake basin: a separate low-frequency field dips low → dig out to y=1.
-  const lake = noise2(x / 6.5, z / 6.5);
-  if (lake < 0.18 && plains <= 3 && !(Math.abs(x) < 5 && Math.abs(z) < 5))
-    return 1;
+  const plains = 2 + Math.round(roll * 2);
+  if (b === 'hills') {
+    const mtn = noise2(x / 11, z / 11);
+    return Math.min(6, 2 + Math.round((mtn - 0.74) * 16)); // rolling 2..6
+  }
   return plains;
 };
 
 /** Where Minecraft-style slim trees may grow: forest bands, away from spawn. */
 export function isTreeSpot(x: number, z: number): boolean {
-  if (Math.abs(x) < 5 && Math.abs(z) < 5) return false; // keep spawn clear
+  if (Math.abs(x) < 8 && Math.abs(z) < 8) return false; // keep spawn clear
+  const b = biomeAt(x, z);
+  if (b !== 'plains' && b !== 'hills') return false; // tundra/mountains/river/lake/desert stay treeless
   const top = height(x, z);
-  if (top <= 1) return false; // no trees in the lake
-  if (top >= 5) return false; // no trees on the stone hills
-  const desert = noise2(x / 9, z / 9) < 0.22 && top <= 2;
-  if (desert) return false; // no trees on the sandy flats
+  if (top <= 1 || top >= 5) return false;
   const forest = noise2(x / 9 + 7.31, z / 9 + 2.17); // separate forest field
-  if (forest < 0.48 || forest > 0.68) return false;
-  return noise2(x, z) < 0.09; // sparse, slim trees
+  if (forest < 0.52 || forest > 0.64) return false;
+  return noise2(x, z) < 0.06; // sparse, slim trees
 }
 
 /** Deterministic pseudo-random 0..1 for a given local offset (per-tree variation). */
@@ -178,39 +231,58 @@ function plantTree(
   put(0, 2, 0);
 }
 
-/** Build the initial world: terrain + oak forests + water. Deterministic. */
-export function terrain(): Map<string, Block> {
-  const blocks = new Map<string, Block>();
-  for (let x = -LIMIT; x <= LIMIT; x++)
-    for (let z = -LIMIT; z <= LIMIT; z++) {
+/**
+ * Build terrain inside [minX..maxX] × [minZ..maxZ], appending into `blocks`
+ * (which may already hold neighbouring terrain, so tree spacing stays clean
+ * across chunk borders). Deterministic; used for the initial world and for
+ * streaming new chunks as players walk outward.
+ */
+export function terrainRange(
+  minX: number,
+  minZ: number,
+  maxX: number,
+  maxZ: number,
+  blocks: Map<string, Block> = new Map(),
+  added?: Block[],
+): Map<string, Block> {
+  for (let x = minX; x <= maxX; x++)
+    for (let z = minZ; z <= maxZ; z++) {
       const top = height(x, z);
-      const desert = noise2(x / 9, z / 9) < 0.22 && top <= 2;
-      const topMaterial: Material =
-        top <= 0 || desert
-          ? 'sand'
-          : top >= 7
-            ? 'stone'
-            : top >= 5
-              ? 'cobble'
-              : 'grass';
+      const b = biomeAt(x, z);
+      const desert = b === 'desert' || b === 'river' || b === 'lake';
+      const snow = b === 'tundra';
+      const rocky = b === 'mountains';
+      let topMaterial: Material;
+      if (snow) topMaterial = 'snow';
+      else if (rocky) topMaterial = top >= 9 ? 'stone' : 'cobble';
+      else if (desert) topMaterial = 'sand';
+      else topMaterial = top >= 7 ? 'stone' : top >= 5 ? 'cobble' : 'grass';
       for (let y = 0; y <= top; y++) {
-        const b: Block = {
-          x,
-          y,
-          z,
-          material:
-            y === top
-              ? topMaterial
-              : y === 0
-                ? 'cobble'
-                : top >= 5
-                  ? 'stone'
-                  : 'dirt',
-        };
-        blocks.set(key(b), b);
+        const material: Material =
+          y === top
+            ? topMaterial
+            : y === 0
+              ? 'cobble'
+              : rocky || top >= 5
+                ? 'stone'
+                : 'dirt';
+        const block = { x, y, z, material };
+        blocks.set(key(block), block);
+        added?.push(block);
       }
-      // Minecraft-style shallow lake: one water block on top of the basin.
-      if (top === 1) blocks.set(key({ x, y: 2, z }), { x, y: 2, z, material: 'water' });
+      // Water: shallow lake (one block) or a slightly deeper river channel.
+      if (top === 1) {
+        const w = { x, y: 2, z, material: 'water' as Material };
+        blocks.set(key(w), w);
+        added?.push(w);
+      }
+      if (top === 0) {
+        for (const wy of [1, 2]) {
+          const w = { x, y: wy, z, material: 'water' as Material };
+          blocks.set(key(w), w);
+          added?.push(w);
+        }
+      }
       // Slim uniform forest: keep a 2-block gap so canopies never touch.
       if (isTreeSpot(x, z)) {
         const touching = (
@@ -235,6 +307,11 @@ export function terrain(): Map<string, Block> {
     }
   return blocks;
 }
+
+/** Build the initial world: terrain + oak forests + water. Deterministic. */
+export function terrain(): Map<string, Block> {
+  return terrainRange(-LIMIT, -LIMIT, LIMIT, LIMIT);
+}
 export function overlaps(player: Vec3, b: Vec3) {
   return (
     player.x + 0.3 > b.x - 0.5 &&
@@ -246,7 +323,11 @@ export function overlaps(player: Vec3, b: Vec3) {
   );
 }
 export function collides(p: Vec3, blocks: Map<string, Block>) {
-  if (Math.abs(p.x) > LIMIT - 0.3 || Math.abs(p.z) > LIMIT - 0.3 || p.y < 0.5)
+  if (
+    Math.abs(p.x) > WORLD_EXTENT - 0.3 ||
+    Math.abs(p.z) > WORLD_EXTENT - 0.3 ||
+    p.y < 0.5
+  )
     return true;
   for (
     let x = Math.floor(p.x - 0.3 + 0.5);
@@ -275,10 +356,23 @@ export function simulate(
   const mag = Math.max(1, Math.hypot(input.x, input.z));
   for (const axis of ['x', 'z'] as const) {
     const next = { ...body, [axis]: body[axis] + (input[axis] / mag) * 4 * dt };
-    if (!collides(next, blocks)) body[axis] = next[axis];
+    if (!collides(next, blocks)) {
+      body[axis] = next[axis];
+    } else {
+      // Minecraft-style auto step: climb small bumps (up to 2 blocks) so
+      // terrain variety doesn't wall you off; tall cliffs still need a walk-around.
+      for (const lift of [1, 2]) {
+        const stepped = { ...next, y: body.y + lift };
+        if (!collides(stepped, blocks)) {
+          body[axis] = next[axis];
+          body.y = stepped.y;
+          break;
+        }
+      }
+    }
   }
   if (input.jump && body.grounded) {
-    body.vy = 7;
+    body.vy = 8.2; // ~1.6-block hop, closer to Minecraft feel for climbing bumps
     body.grounded = false;
   }
   body.vy = Math.max(-20, body.vy - 20 * dt);
