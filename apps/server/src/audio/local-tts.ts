@@ -65,7 +65,7 @@ export class LocalTts implements SpeechSynthesizer {
           '-v',
           voice,
           '-r',
-          String(Math.round(240 * (this.options.speed ?? 1))),
+          String(Math.round(200 * (this.options.speed ?? 1))),
           '-f',
           input,
           '-o',

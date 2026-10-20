@@ -142,7 +142,7 @@ function pickPhrase(pool: [string, string][]): [string, string] {
 let ttsAudio: AudioContext | null = null;
 // Cache key carries a voice version: bump it after any TTS voice/speed change
 // so players hear the new voice instead of a cached older rendering.
-const TTS_CACHE_VERSION = 'v4-daniel-fast';
+const TTS_CACHE_VERSION = 'v5-daniel-natural';
 const ttsCache = new Map<string, ArrayBuffer>();
 let ttsQueue: Promise<void> = Promise.resolve();
 
