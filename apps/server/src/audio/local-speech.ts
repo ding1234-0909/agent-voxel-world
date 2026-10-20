@@ -105,22 +105,25 @@ export class LocalSpeech {
       fileURLToPath(
         new URL('../../../../.data/voice/ggml-base.bin', import.meta.url),
       ),
-    private whisper = process.env.WHISPER_BIN ?? 'whisper-cli',
+    private whisper =
+      process.env.WHISPER_BIN ??
+      fileURLToPath(
+        new URL('../../../../.data/tools/whisper-cli', import.meta.url),
+      ),
     private ffmpeg = process.env.FFMPEG_BIN ?? 'ffmpeg',
     private runner: CommandRunner = run,
   ) {}
   async status() {
     try {
-      const [model, whisper, ffmpeg] = await Promise.all([
+      const [model, whisper] = await Promise.all([
         stat(this.model),
         executable(this.whisper),
-        executable(this.ffmpeg),
       ]);
       if (model.size < 1024 * 1024 || !model.isFile()) throw Error('model');
-      if (!whisper || !ffmpeg)
+      if (!whisper)
         return {
           available: false,
-          reason: '缺少 whisper-cli 或 ffmpeg，请按语音配置文档安装。',
+          reason: '缺少 whisper-cli，请按语音配置文档安装。',
         };
       return {
         available: true,
@@ -211,33 +214,45 @@ export class LocalSpeech {
         wav = join(dir, 'audio.wav'),
         output = join(dir, 'transcript');
       await writeFile(input, audio, { mode: 0o600 });
-      await this.runner(
-        this.ffmpeg,
-        [
-          '-nostdin',
-          '-v',
-          'error',
-          '-protocol_whitelist',
-          'file,pipe',
-          '-f',
-          format,
-          '-i',
-          input,
-          '-t',
-          '21',
-          '-vn',
-          '-ar',
-          '16000',
-          '-ac',
-          '1',
-          '-c:a',
-          'pcm_s16le',
-          wav,
-        ],
-        signal,
-        15000,
-      );
-      validatePcmWav(await readFile(wav));
+      if (format === 'wav') {
+        // Direct pass-through for server-standard WAV (16 kHz mono PCM16),
+        // so speech works without FFmpeg on this machine.
+        validatePcmWav(await readFile(input));
+        await writeFile(wav, await readFile(input), { mode: 0o600 });
+      } else {
+        if (!(await executable(this.ffmpeg)))
+          throw new SpeechError(
+            '服务器缺少 FFmpeg，无法转换该音频格式，请使用 WAV。',
+            415,
+          );
+        await this.runner(
+          this.ffmpeg,
+          [
+            '-nostdin',
+            '-v',
+            'error',
+            '-protocol_whitelist',
+            'file,pipe',
+            '-f',
+            format,
+            '-i',
+            input,
+            '-t',
+            '21',
+            '-vn',
+            '-ar',
+            '16000',
+            '-ac',
+            '1',
+            '-c:a',
+            'pcm_s16le',
+            wav,
+          ],
+          signal,
+          15000,
+        );
+        validatePcmWav(await readFile(wav));
+      }
       await this.runner(
         this.whisper,
         [
@@ -252,8 +267,6 @@ export class LocalSpeech {
           output,
           '-nt',
           '-np',
-          '-sns',
-          '-ng',
           '-t',
           '4',
         ],

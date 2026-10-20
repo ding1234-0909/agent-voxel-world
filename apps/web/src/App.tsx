@@ -45,13 +45,22 @@ export function App({ connection }: { connection: Connection }) {
         setActivePanel(null);
         setShowControls(false);
       }
-      // Hold V: speak English to the companions (oral practice).
+      // Hold V: speak to the companions (oral practice). Release submits.
       if (event.code === 'KeyV' && joined) {
         voice.startListening();
       }
     };
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.code === 'KeyV') {
+        voice.stopListening();
+      }
+    };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
   }, [joined, voice]);
 
   const openConsole = (initialTab?: 'agents') => {

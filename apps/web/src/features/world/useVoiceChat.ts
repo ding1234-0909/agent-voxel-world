@@ -1,26 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
+import { LiveRecorder } from '../../audio/live-recorder';
+import { speechTransport } from '../../audio/live-speech';
 
 /**
  * Oral-practice companion chat: talk with the companions in English.
- * - Hold V (or tap the mic button): the browser transcribes your speech.
+ * - Hold V (or tap the mic button): the server transcribes your speech with
+ *   the local Whisper model (中文/英文都能识别，无需任何在线 API)。
  * - Or type English in the input box — works in every browser.
  * Either way DeepSeek answers with a short natural English reply + Chinese
  * translation, and a companion speaks it out loud.
  * A stable per-player session id gives the AI memory of the conversation.
  */
-
-type Recognition = {
-  start: () => void;
-  stop: () => void;
-  abort: () => void;
-  onresult: ((event: { results: { [i: number]: { [j: number]: { transcript: string } } } }) => void) | null;
-  onerror: ((event: { error?: string }) => void) | null;
-  onend: (() => void) | null;
-  lang: string;
-  interimResults: boolean;
-  maxAlternatives: number;
-  continuous: boolean;
-};
 
 export function useVoiceChat(
   onReply: (en: string, zh: string) => void,
@@ -28,7 +18,7 @@ export function useVoiceChat(
   const [state, setState] = useState<
     'idle' | 'listening' | 'thinking' | 'error' | 'unsupported'
   >('idle');
-  const recognitionRef = useRef<Recognition | null>(null);
+  const recorderRef = useRef<LiveRecorder | null>(null);
   const onReplyRef = useRef(onReply);
   onReplyRef.current = onReply;
   const busyRef = useRef(false);
@@ -69,56 +59,43 @@ export function useVoiceChat(
   };
 
   useEffect(() => {
-    const SR = (
-      window as unknown as {
-        SpeechRecognition?: new () => Recognition;
-        webkitSpeechRecognition?: new () => Recognition;
-      }
-    ).SpeechRecognition ?? (
-      window as unknown as {
-        SpeechRecognition?: new () => Recognition;
-        webkitSpeechRecognition?: new () => Recognition;
-      }
-    ).webkitSpeechRecognition;
-    if (!SR) {
-      setState('unsupported');
-      return;
-    }
-    const recognition = new SR();
-    recognition.lang = 'en-US';
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-    recognition.continuous = false;
-    recognition.onresult = (event) => {
-      const text = event.results[0]?.[0]?.transcript?.trim() ?? '';
-      if (!text) return;
-      sendText(text);
-    };
-    recognition.onerror = (event) => {
-      if (event.error === 'aborted') return;
-      setState('error');
-    };
-    recognition.onend = () => {
-      if (!busyRef.current) setState('idle');
-    };
-    recognitionRef.current = recognition;
+    const recorder = new LiveRecorder();
+    recorderRef.current = recorder;
     return () => {
-      recognition.abort();
-      recognitionRef.current = null;
+      recorder.cancel();
+      recorderRef.current = null;
     };
   }, []);
 
   const startListening = () => {
     if (busyRef.current) return;
-    const recognition = recognitionRef.current;
-    if (!recognition) return;
-    try {
-      setState('listening');
-      recognition.start();
-    } catch {
-      setState('error');
+    const recorder = recorderRef.current;
+    if (!recorder) return;
+    if (!recorder.canRecord) {
+      setState('unsupported');
+      return;
     }
+    void recorder.start(
+      'zh-CN',
+      {
+        onPartial: () => {},
+        onFinal: (text) => sendText(text),
+        onStatus: () => {},
+        onError: () => setState('error'),
+        onEnd: () => {
+          if (!busyRef.current) setState('idle');
+        },
+        onState: (_next, _message) => {},
+      },
+      undefined,
+      speechTransport('zh-CN'),
+    );
+    setState('listening');
   };
 
-  return { state, startListening, sendText };
+  const stopListening = () => {
+    void recorderRef.current?.finish();
+  };
+
+  return { state, startListening, stopListening, sendText };
 }
