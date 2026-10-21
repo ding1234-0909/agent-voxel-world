@@ -10,18 +10,25 @@ const CONFIG_KEY = 'mcAiTutorConfig';
 const HISTORY_KEY = 'mcAiHistory';
 export const MAX_HISTORY = 20;
 
+/** 默认走 DeepSeek 的 OpenAI 兼容接口；apiKey 由本机浏览器保存，不入库。 */
+export const DEFAULT_TUTOR_CONFIG = {
+  baseURL: 'https://api.deepseek.com/v1',
+  apiKey: '',
+  model: 'deepseek-chat',
+} as const;
+
 export function loadConfig(): TutorConfig {
   try {
     const raw = localStorage.getItem(CONFIG_KEY);
-    if (!raw) return { baseURL: '', apiKey: '', model: '' };
+    if (!raw) return { ...DEFAULT_TUTOR_CONFIG };
     const parsed = JSON.parse(raw) as Partial<TutorConfig>;
     return {
-      baseURL: typeof parsed.baseURL === 'string' ? parsed.baseURL : '',
+      baseURL: typeof parsed.baseURL === 'string' ? parsed.baseURL : DEFAULT_TUTOR_CONFIG.baseURL,
       apiKey: typeof parsed.apiKey === 'string' ? parsed.apiKey : '',
-      model: typeof parsed.model === 'string' ? parsed.model : '',
+      model: typeof parsed.model === 'string' ? parsed.model : DEFAULT_TUTOR_CONFIG.model,
     };
   } catch {
-    return { baseURL: '', apiKey: '', model: '' };
+    return { ...DEFAULT_TUTOR_CONFIG };
   }
 }
 
