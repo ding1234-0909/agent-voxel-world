@@ -8,6 +8,7 @@ export type SpatialStatus = {
   connected: number;
   error: string;
   agentSpeaking?: string;
+  agentSpeakingActor?: string;
 };
 type Signal = {
   from: string;
@@ -69,8 +70,9 @@ export class SpatialVoice {
       link,
       () => this.context,
       () => this.state.listening,
-      (text, error) => {
+      (text, actor, error) => {
         this.state.agentSpeaking = text;
+        this.state.agentSpeakingActor = actor;
         if (error) this.state.error = error;
         this.emit();
       },

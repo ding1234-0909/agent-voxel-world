@@ -1,11 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Connection } from '../../network/connection';
+import type { SpeechAnchor } from '../../graphics/speech-anchor';
 import { SpatialVoice, type SpatialStatus } from '../../audio/spatial-voice';
 import {
   SpatialTranscriber,
   type TranscriptionState,
 } from '../../audio/spatial-transcriber';
-export function SpatialVoicePanel({ connection }: { connection: Connection }) {
+export function SpatialVoicePanel({
+  connection,
+  speechAnchor,
+}: {
+  connection: Connection;
+  speechAnchor: (actor: string) => SpeechAnchor | null;
+}) {
   const [collapsed, setCollapsed] = useState(false);
   const [state, setState] = useState<SpatialStatus>({
     sending: false,
@@ -123,9 +130,15 @@ export function SpatialVoicePanel({ connection }: { connection: Connection }) {
       <small>说话时显示临时字幕，整句确认后附近 Agent 才会收到。</small>
       <small>开启收听可听见附近 Agent 的语音回复；私聊仅接收者可听。</small>
       {state.agentSpeaking && (
-        <p className="spatial-caption" role="status">
-          正在说话 · {state.agentSpeaking}
-        </p>
+        <AgentCaptionBubble
+          key={state.agentSpeaking}
+          text={state.agentSpeaking}
+          anchor={
+            state.agentSpeakingActor
+              ? speechAnchor(state.agentSpeakingActor)
+              : null
+          }
+        />
       )}
       <small role="status">{transcript.status}</small>
       {transcript.partial && (
@@ -145,5 +158,43 @@ export function SpatialVoicePanel({ connection }: { connection: Connection }) {
         </p>
       )}
     </section>
+  );
+}
+
+/** 伙伴语音播放时的世界内字幕气泡：跟随角色屏幕位置，2.6 秒后淡出。 */
+function AgentCaptionBubble({
+  text,
+  anchor,
+}: {
+  text: string;
+  anchor: SpeechAnchor | null;
+}) {
+  const [visible, setVisible] = useState(true);
+  const [style, setStyle] = useState<React.CSSProperties>({ opacity: 1 });
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setStyle({ opacity: 0 });
+      window.setTimeout(() => setVisible(false), 400);
+    }, 2600);
+    return () => window.clearTimeout(timer);
+  }, [text]);
+  if (!visible) return null;
+  return (
+    <div
+      className="agent-caption-bubble"
+      role="status"
+      style={{
+        ...style,
+        ...(anchor
+          ? {
+              left: `${Math.min(880, Math.max(20, anchor.x))}px`,
+              top: `${Math.max(8, anchor.y - 40)}px`,
+            }
+          : { left: '50%', top: '20%', transform: 'translateX(-50%)' }),
+        transition: 'opacity 0.4s ease',
+      }}
+    >
+      {text}
+    </div>
   );
 }

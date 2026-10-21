@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Material } from '@voxel/shared';
 import type { Connection } from '../../network/connection';
 import { WorldScene } from '../../graphics/scene';
@@ -52,6 +52,11 @@ export function useWorldScene(connection: Connection) {
     sceneRef.current?.leaveWorld();
   };
 
+  const speechAnchor = useCallback(
+    (actor: string) => sceneRef.current?.speechAnchor(actor) ?? null,
+    [],
+  );
+
   return {
     hostRef,
     sceneRef,
@@ -62,5 +67,6 @@ export function useWorldScene(connection: Connection) {
     setMaterial,
     editBlock,
     leaveWorldScene,
+    speechAnchor,
   };
 }

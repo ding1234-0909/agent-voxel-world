@@ -11,6 +11,7 @@ import { disposePhotoTextures } from './textures';
 import { CloudField } from './clouds';
 import { DayNightCycle } from './daynight';
 import { HeldBlock } from './held-block';
+import { projectSpeechAnchor } from './speech-anchor';
 import { BreakParticles } from './particles';
 import { DropField, dropForBreak } from './drops';
 import { Foliage } from './foliage';
@@ -710,6 +711,18 @@ export class WorldScene {
     this.renderer.render(this.scene, this.camera);
     this.raf = requestAnimationFrame(this.frame);
   };
+  /** Project an actor's screen position for speech-caption anchoring. */
+  speechAnchor(actor: string) {
+    const avatar = this.avatars.get(actor);
+    if (!avatar?.visible || this.connection.status !== 'connected') return null;
+    return projectSpeechAnchor(
+      this.camera,
+      avatar.position,
+      this.host.clientWidth,
+      this.host.clientHeight,
+      Array.from(this.meshes.values()),
+    );
+  }
   leaveWorld() {
     this.keys.clear();
     if (document.pointerLockElement === this.renderer.domElement)

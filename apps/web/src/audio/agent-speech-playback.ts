@@ -18,7 +18,7 @@ export class AgentSpeechPlayback {
     private link: Link,
     private context: () => AudioContext | undefined,
     private listening: () => boolean,
-    private changed: (text: string, error?: string) => void,
+    private changed: (text: string, actor?: string, error?: string) => void,
     private fetchAudio: typeof fetch = (...args) => fetch(...args),
   ) {}
   receive = (event: AgentSpeechEvent) => {
@@ -115,12 +115,13 @@ export class AgentSpeechPlayback {
       this.update();
       if (this.active !== active) return;
       active.source.start();
-      this.changed(`${speaker.name}：${event.text}`);
+      this.changed(`${speaker.name}：${event.text}`, speaker.id);
     } catch (error) {
       if (!active.abort.signal.aborted) {
         this.finish();
         this.changed(
           '',
+          undefined,
           error instanceof Error ? error.message : 'Agent 语音播放失败。',
         );
         void this.next();

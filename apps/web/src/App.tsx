@@ -28,7 +28,7 @@ export function App({ connection }: { connection: Connection }) {
   const [name, setName] = useState(savedName ?? 'Explorer');
   const [joined, setJoined] = useState(!!savedName);
 
-  const { hostRef, target, material, companionSay, voice, setMaterial, editBlock, leaveWorldScene } =
+  const { hostRef, target, material, companionSay, voice, setMaterial, editBlock, leaveWorldScene, speechAnchor } =
     useWorldScene(connection);
 
   useEffect(() => {
@@ -184,7 +184,7 @@ export function App({ connection }: { connection: Connection }) {
 
       {joined && (
         <div className="communication">
-          <SpatialVoicePanel connection={connection} />
+          <SpatialVoicePanel connection={connection} speechAnchor={speechAnchor} />
           <ChatPanel connection={connection} />
         </div>
       )}
