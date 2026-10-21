@@ -103,7 +103,7 @@ export class LocalSpeech {
   constructor(
     private model = process.env.WHISPER_MODEL ??
       fileURLToPath(
-        new URL('../../../../.data/voice/ggml-base.bin', import.meta.url),
+        new URL('../../../../.data/voice/ggml-small.bin', import.meta.url),
       ),
     private whisper =
       process.env.WHISPER_BIN ??
@@ -261,7 +261,7 @@ export class LocalSpeech {
           '-f',
           wav,
           '-l',
-          language,
+          'auto',
           '-otxt',
           '-of',
           output,
