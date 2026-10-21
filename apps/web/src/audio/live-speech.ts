@@ -1,5 +1,16 @@
 import { serverHttpUrl } from '../network/endpoints';
 
+/** 识别引擎选择：local=本地Whisper，bailian=阿里云百炼（本机浏览器记忆）。 */
+export function asrEngineParam(): string {
+  try {
+    return localStorage.getItem('voxel-asr-engine') === 'bailian'
+      ? '&engine=bailian'
+      : '';
+  } catch {
+    return '';
+  }
+}
+
 export type LiveSpeechEvents = {
   onPartial: (text: string) => void;
   onFinal: (text: string) => void;
@@ -49,7 +60,7 @@ export function speechTransport(
     recognize: async (id, audio, partial, signal) => {
       const path = token
         ? `/chat/spatial/${encodeURIComponent(id)}${partial ? '/preview' : ''}`
-        : `/voice/transcribe?language=${language.startsWith('zh') ? 'zh' : 'en'}${partial ? '&partial=1' : ''}`;
+        : `/voice/transcribe?language=${language.startsWith('zh') ? 'zh' : 'en'}${partial ? '&partial=1' : ''}${asrEngineParam()}`;
       const value = await call(path, signal, audio);
       if (
         typeof value.text !== 'string' ||

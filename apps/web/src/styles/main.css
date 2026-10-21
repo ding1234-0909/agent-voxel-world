@@ -1898,6 +1898,76 @@ footer {
   border: 5px solid transparent;
   border-top-color: rgba(24, 24, 24, 0.82);
 }
+.asr-engine-box {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border: 1px solid #d9e1d3;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.72);
+}
+.asr-engine-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.asr-engine-row select,
+.asr-config-form select,
+.asr-config-form input {
+  font-size: 12px;
+  padding: 4px 6px;
+  border: 1px solid #b9c4b2;
+  border-radius: 6px;
+  background: #fff;
+}
+.asr-config-toggle {
+  margin-top: 8px;
+  font-size: 12px;
+  padding: 4px 10px;
+  border: 1px solid #8bc34a;
+  border-radius: 6px;
+  color: #4a7c1a;
+  background: #f3fbe8;
+  cursor: pointer;
+}
+.asr-saved-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  color: #4a7c1a;
+}
+.asr-config-form {
+  margin-top: 8px;
+  display: grid;
+  gap: 6px;
+}
+.asr-config-form label {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: #4a5a42;
+}
+.asr-save-btn {
+  justify-self: end;
+  font-size: 12px;
+  padding: 5px 14px;
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  background: #8bc34a;
+  cursor: pointer;
+}
+.asr-save-btn:disabled {
+  opacity: 0.6;
+}
+.asr-msg {
+  font-size: 11px;
+  color: #4a7c1a;
+}
 .spatial-voice {
   flex: 0 1 auto;
   min-height: 0;

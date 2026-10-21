@@ -435,3 +435,19 @@ export function parseInput(value: unknown): Input | null {
     return null;
   return { x: v.x, z: v.z, yaw: v.yaw, jump: v.jump };
 }
+
+/** 阿里云百炼实时识别配置（仅存服务器本地，不随前端下发）。 */
+export interface BailianAsrDraft {
+  region: 'beijing' | 'singapore';
+  model: 'fun-asr-realtime' | 'paraformer-realtime-v2';
+  workspaceId: string;
+  apiKey: string;
+}
+
+/** 识别服务能力描述，供前端选择引擎。 */
+export type AsrEngine = 'local' | 'bailian';
+export interface AsrCapability {
+  engine: AsrEngine;
+  available: boolean;
+  reason?: string;
+}
