@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mkdtemp, rm, writeFile, access } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, writeFile, access } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import {
@@ -28,7 +28,8 @@ describe('local Whisper transcription', () => {
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), 'speech-test-'));
     model = join(dir, 'model');
-    await writeFile(model, Buffer.alloc(1024 * 1024));
+    await mkdir(model, { recursive: true });
+    await writeFile(join(model, 'model.bin'), Buffer.alloc(1024 * 1024));
   });
   afterEach(async () => {
     await rm(dir, { recursive: true, force: true });
@@ -50,16 +51,15 @@ describe('local Whisper transcription', () => {
   });
   it('normalizes audio, passes only fixed arguments, and removes temporary files', async () => {
     const runner = vi.fn(async (_file: string, args: string[]) => {
-      if (args.includes('-protocol_whitelist'))
+      if (args.includes('-protocol_whitelist')) {
         await writeFile(args.at(-1)!, wav());
-      else
-        await writeFile(
-          `${args[args.indexOf('-of') + 1]}.txt`,
-          '  你好，世界。\n',
-        );
+        return { stdout: '' };
+      }
+      return { stdout: '{"text":"  你好，世界。\\n"}' };
     });
     const speech = new LocalSpeech(
       model,
+      process.execPath,
       process.execPath,
       process.execPath,
       runner,
@@ -83,6 +83,7 @@ describe('local Whisper transcription', () => {
       model,
       process.execPath,
       process.execPath,
+      'ffmpeg',
       runner,
     );
     await expect(
@@ -117,11 +118,12 @@ describe('local Whisper transcription', () => {
       model,
       process.execPath,
       process.execPath,
+      'ffmpeg',
       runner,
     );
     await expect(
       speech.transcribe(
-        Buffer.from('x'),
+        wav(),
         'audio/wav',
         'en',
         new AbortController().signal,
@@ -132,7 +134,7 @@ describe('local Whisper transcription', () => {
     ).rejects.toThrow();
     await expect(
       speech.transcribe(
-        Buffer.from('x'),
+        wav(),
         'audio/wav',
         'en',
         new AbortController().signal,
@@ -146,7 +148,7 @@ describe('local Whisper transcription', () => {
     });
     const runner = vi.fn(
       (_file: string, _args: string[], signal: AbortSignal) =>
-        new Promise<void>((_resolve, reject) => {
+        new Promise<{ stdout: string }>((_resolve, reject) => {
           started();
           signal.addEventListener('abort', () => reject(signal.reason), {
             once: true,
@@ -157,11 +159,12 @@ describe('local Whisper transcription', () => {
       model,
       process.execPath,
       process.execPath,
+      'ffmpeg',
       runner,
     );
     const controller = new AbortController();
     const first = speech.transcribe(
-      Buffer.from('x'),
+      wav(),
       'audio/wav',
       'en',
       controller.signal,
@@ -170,7 +173,7 @@ describe('local Whisper transcription', () => {
     await start;
     await expect(
       speech.transcribe(
-        Buffer.from('x'),
+        wav(),
         'audio/wav',
         'en',
         new AbortController().signal,
