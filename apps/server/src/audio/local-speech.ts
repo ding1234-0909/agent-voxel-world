@@ -35,15 +35,14 @@ export type CommandRunner = (
   args: string[],
   signal: AbortSignal,
   timeout: number,
-) => Promise<void>;
-const run: CommandRunner = async (file, args, signal, timeout) => {
+) => Promise<{ stdout: string }>;
+const run: CommandRunner = async (file, args, signal, timeout) =>
   await exec(file, args, {
     signal,
     timeout,
     killSignal: 'SIGKILL',
     maxBuffer: 512 * 1024,
   });
-};
 export async function executable(name: string) {
   const candidates = name.includes('/')
     ? [name]
@@ -101,34 +100,47 @@ export function validatePcmWav(wav: Buffer, maxSeconds = 20.5) {
 export class LocalSpeech {
   private busy = false;
   constructor(
-    private model = process.env.WHISPER_MODEL ??
+    private model =
+      process.env.WHISPER_MODEL ??
       fileURLToPath(
-        new URL('../../../../.data/voice/ggml-small.bin', import.meta.url),
+        new URL(
+          '../../../../.data/faster-whisper-models/small',
+          import.meta.url,
+        ),
       ),
-    private whisper =
-      process.env.WHISPER_BIN ??
+    private python =
+      process.env.WHISPER_PYTHON ??
       fileURLToPath(
-        new URL('../../../../.data/tools/whisper-cli', import.meta.url),
+        new URL(
+          '../../../../.data/faster-whisper-venv/bin/python',
+          import.meta.url,
+        ),
+      ),
+    private script =
+      process.env.WHISPER_SCRIPT ??
+      fileURLToPath(
+        new URL('../../../../.data/tools/faster-transcribe.py', import.meta.url),
       ),
     private ffmpeg = process.env.FFMPEG_BIN ?? 'ffmpeg',
     private runner: CommandRunner = run,
   ) {}
   async status() {
     try {
-      const [model, whisper] = await Promise.all([
-        stat(this.model),
-        executable(this.whisper),
+      const [model, python, script] = await Promise.all([
+        stat(join(this.model, 'model.bin')),
+        executable(this.python),
+        this.script,
       ]);
       if (model.size < 1024 * 1024 || !model.isFile()) throw Error('model');
-      if (!whisper)
+      if (!python || !script)
         return {
           available: false,
-          reason: '缺少 whisper-cli，请按语音配置文档安装。',
+          reason: '缺少 faster-whisper 运行环境，请按语音配置文档安装。',
         };
       return {
         available: true,
         reason:
-          '自托管 Whisper 已就绪。音频上传至项目服务器，由服务器完成识别。',
+          'faster-whisper 已就绪。音频上传至项目服务器，由服务器完成识别。',
       };
     } catch {
       return {
@@ -211,8 +223,7 @@ export class LocalSpeech {
       signal.throwIfAborted();
       dir = await mkdtemp(join(tmpdir(), 'voxel-speech-'));
       const input = join(dir, 'input'),
-        wav = join(dir, 'audio.wav'),
-        output = join(dir, 'transcript');
+        wav = join(dir, 'audio.wav');
       await writeFile(input, audio, { mode: 0o600 });
       if (format === 'wav') {
         // Direct pass-through for server-standard WAV (16 kHz mono PCM16),
@@ -253,30 +264,22 @@ export class LocalSpeech {
         );
         validatePcmWav(await readFile(wav));
       }
-      await this.runner(
-        this.whisper,
-        [
-          '-m',
-          this.model,
-          '-f',
-          wav,
-          '-l',
-          'auto',
-          '-otxt',
-          '-of',
-          output,
-          '-nt',
-          '-np',
-          '-t',
-          '4',
-        ],
+      const { stdout } = await this.runner(
+        this.python,
+        [this.script, this.model, language, wav],
         signal,
         90000,
       );
       signal.throwIfAborted();
-      const text = (await readFile(`${output}.txt`, 'utf8'))
-        .replace(/\s+/g, ' ')
-        .trim();
+      let payload: { text?: string; error?: string };
+      try {
+        payload = JSON.parse(stdout);
+      } catch {
+        throw new SpeechError('识别服务输出异常，请重试。', 502);
+      }
+      if (payload.error || !payload.text)
+        throw new SpeechError(payload.error || '没有识别到文字，请重试。', 502);
+      const text = payload.text.replace(/\s+/g, ' ').trim();
       if (!text || /^\[.*\]$/.test(text))
         throw new SpeechError('没有识别到文字，请重试。');
       if (text.length > 240)
