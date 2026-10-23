@@ -10,3 +10,4 @@ artifacts/
 .playwright-cli/
 output/
 .vscode/
+!.data/tools/
