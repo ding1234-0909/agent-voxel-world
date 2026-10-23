@@ -114,16 +114,45 @@ export function splitTranslation(raw: string): { en: string; zh: string } {
   return { en: raw.trim(), zh: '' };
 }
 
+/** 先问服务端 AI 陪练（已内置 DeepSeek，无需在浏览器填任何密钥）。 */
+async function fetchServerAiChat(text: string): Promise<TutorReply | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  try {
+    const res = await fetch('/ai/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, session: 'ai-tutor' }),
+      signal: controller.signal,
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { en?: string; zh?: string };
+    if (data.en) {
+      return { en: data.en, zh: data.zh ?? '', raw: `${data.en}（${data.zh ?? ''}）` };
+    }
+    return null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function sendTutorChat(
   config: TutorConfig,
   history: ChatMessage[],
   timeoutMs = DEFAULT_TIMEOUT_MS,
 ): Promise<TutorReply> {
-  if (!config.baseURL.trim() || !config.apiKey.trim() || !config.model.trim()) {
-    // 未配置 AI 接口时，使用智能离线陪练兜底（听懂你的话再回应）
-    const lastUser = [...history].reverse().find((m) => m.role === 'user')?.content || '';
-    return pickOfflineReply(lastUser, history);
+  const lastUser = [...history].reverse().find((m) => m.role === 'user')?.content || '';
+
+  // 1. 优先走服务端 AI 陪练（已内置 DeepSeek 密钥，玩家无需任何配置）
+  if (lastUser) {
+    const serverReply = await fetchServerAiChat(lastUser);
+    if (serverReply) return serverReply;
   }
+
+  // 2. 服务端不可用时，若浏览器里填过自己的接口，则浏览器直连
+  if (config.baseURL.trim() && config.apiKey.trim() && config.model.trim()) {
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -170,9 +199,12 @@ export async function sendTutorChat(
   } catch (error) {
     if (error instanceof TutorError) throw error;
     // 网络错误 / 超时 / CORS 拦截 / 未联网：切换到智能离线兜底，伙伴照常说话
-    const lastUser = [...history].reverse().find((m) => m.role === 'user')?.content || '';
     return pickOfflineReply(lastUser, history);
   } finally {
     clearTimeout(timer);
   }
+  }
+
+  // 3. 服务端和浏览器都没配置接口：智能离线兜底（听懂你的话再回应）
+  return pickOfflineReply(lastUser, history);
 }
