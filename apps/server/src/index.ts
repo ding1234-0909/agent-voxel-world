@@ -26,10 +26,15 @@ try {
 
 const app = express();
 app.use((req, res, next) => {
-  if (
-    req.headers.origin === (process.env.WEB_ORIGIN ?? 'http://127.0.0.1:5173')
-  )
-    res.header('Access-Control-Allow-Origin', req.headers.origin);
+  // 本地游戏服务：允许任意来源（127.0.0.1 / localhost / 局域网 IP）访问。
+  // 服务器只监听 127.0.0.1，外部网络无法访问，无跨站风险。
+  const origin = req.headers.origin;
+  if (origin) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Vary', 'Origin');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  }
   next();
 });
 const speech = new LocalSpeech();
