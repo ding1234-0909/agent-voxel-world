@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process';
+import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { constants } from 'node:fs';
 import {
   access,
@@ -99,6 +99,18 @@ export function validatePcmWav(wav: Buffer, maxSeconds = 20.5) {
 }
 export class LocalSpeech {
   private busy = false;
+  private whisper?: {
+    proc: ChildProcess;
+    nextId: number;
+    buffer: string;
+    pending: Map<
+      number,
+      {
+        resolve: (value: { text?: string; error?: string }) => void;
+        reject: (error: Error) => void;
+      }
+    >;
+  };
   constructor(
     private model =
       process.env.WHISPER_MODEL ??
@@ -121,18 +133,119 @@ export class LocalSpeech {
       fileURLToPath(
         new URL('../../../../.data/tools/faster-transcribe.py', import.meta.url),
       ),
+    private serverScript =
+      process.env.WHISPER_SERVER_SCRIPT ??
+      fileURLToPath(
+        new URL('../../../../.data/tools/faster-server.py', import.meta.url),
+      ),
     private ffmpeg = process.env.FFMPEG_BIN ?? 'ffmpeg',
     private runner: CommandRunner = run,
   ) {}
+  /**
+   * 常驻 faster-whisper 服务：模型只加载一次，之后逐句秒回。
+   * 首句需加载模型（约 2 秒），后续转写不再有模型加载开销。
+   */
+  private async ensureServer() {
+    if (this.whisper && this.whisper.proc.exitCode === null) return this.whisper;
+    const proc = spawn(this.python, [this.serverScript], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    const whisper = {
+      proc,
+      nextId: 1,
+      buffer: '',
+      pending: new Map<
+        number,
+        {
+          resolve: (value: { text?: string; error?: string }) => void;
+          reject: (error: Error) => void;
+        }
+      >(),
+    };
+    proc.stdout?.on('data', (chunk: Buffer) => {
+      whisper.buffer += chunk.toString();
+      let nl = whisper.buffer.indexOf('\n');
+      while (nl !== -1) {
+        const line = whisper.buffer.slice(0, nl).trim();
+        whisper.buffer = whisper.buffer.slice(nl + 1);
+        nl = whisper.buffer.indexOf('\n');
+        if (!line) continue;
+        try {
+          const msg = JSON.parse(line) as {
+            id: number;
+            text?: string;
+            error?: string;
+          };
+          const p = whisper.pending.get(msg.id);
+          if (p) {
+            whisper.pending.delete(msg.id);
+            if (msg.error) p.reject(new SpeechError(msg.error, 502));
+            else p.resolve(msg);
+          }
+        } catch {
+          /* 忽略无法解析的行 */
+        }
+      }
+    });
+    proc.stderr?.on('data', () => {}); // Whisper 日志走 stderr，不影响协议
+    proc.on('exit', () => {
+      for (const [, p] of whisper.pending)
+        p.reject(new SpeechError('识别服务已退出，请重试。', 502));
+      whisper.pending.clear();
+      if (this.whisper === whisper) this.whisper = undefined;
+    });
+    this.whisper = whisper;
+    return whisper;
+  }
+  private async recognize(
+    language: string,
+    wav: string,
+    signal: AbortSignal,
+  ): Promise<string> {
+    const srv = await this.ensureServer();
+    const id = srv.nextId++;
+    const result = new Promise<{ text?: string; error?: string }>(
+      (resolve, reject) => {
+        srv.pending.set(id, { resolve, reject });
+      },
+    );
+    srv.proc.stdin?.write(
+      JSON.stringify({ id, model: this.model, language, wav }) + '\n',
+    );
+    const timeout = setTimeout(() => {
+      const p = srv.pending.get(id);
+      if (p) {
+        srv.pending.delete(id);
+        p.reject(new SpeechError('识别服务超时，请重试。', 502));
+      }
+    }, 90000);
+    signal.addEventListener('abort', () => {
+      const p = srv.pending.get(id);
+      if (p) {
+        srv.pending.delete(id);
+        p.reject(new SpeechError('请求已取消。', 499));
+      }
+    });
+    try {
+      const payload = await result;
+      clearTimeout(timeout);
+      if (payload.error || !payload.text)
+        throw new SpeechError(payload.error || '没有识别到文字，请重试。', 502);
+      return payload.text.replace(/\s+/g, ' ').trim();
+    } catch (error) {
+      clearTimeout(timeout);
+      throw error;
+    }
+  }
   async status() {
     try {
-      const [model, python, script] = await Promise.all([
+      const [model, python, serverScript] = await Promise.all([
         stat(join(this.model, 'model.bin')),
         executable(this.python),
-        this.script,
+        this.serverScript,
       ]);
       if (model.size < 1024 * 1024 || !model.isFile()) throw Error('model');
-      if (!python || !script)
+      if (!python || !serverScript)
         return {
           available: false,
           reason: '缺少 faster-whisper 运行环境，请按语音配置文档安装。',
@@ -264,22 +377,7 @@ export class LocalSpeech {
         );
         validatePcmWav(await readFile(wav));
       }
-      const { stdout } = await this.runner(
-        this.python,
-        [this.script, this.model, language, wav],
-        signal,
-        90000,
-      );
-      signal.throwIfAborted();
-      let payload: { text?: string; error?: string };
-      try {
-        payload = JSON.parse(stdout);
-      } catch {
-        throw new SpeechError('识别服务输出异常，请重试。', 502);
-      }
-      if (payload.error || !payload.text)
-        throw new SpeechError(payload.error || '没有识别到文字，请重试。', 502);
-      const text = payload.text.replace(/\s+/g, ' ').trim();
+      const text = await this.recognize(language, wav, signal);
       if (!text || /^\[.*\]$/.test(text))
         throw new SpeechError('没有识别到文字，请重试。');
       if (text.length > 240)
