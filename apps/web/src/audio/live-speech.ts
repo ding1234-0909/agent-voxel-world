@@ -152,7 +152,7 @@ export class LiveSpeechSession {
         if (this.preRoll.length > 3) this.preRoll.shift();
         return;
       }
-      if (this.finals.length >= 2) {
+      if (this.finals.length >= 5) {
         this.fail(
           '识别跟不上讲话速度，已停止后续转写。请查看消息记录后再继续。',
         );
@@ -188,7 +188,7 @@ export class LiveSpeechSession {
       sentence.voiced += ms;
       sentence.silence = 0;
     } else sentence.silence += ms;
-    if (sentence.silence >= 900 || sentence.duration >= 12000) this.finalize();
+    if (sentence.silence >= 600 || sentence.duration >= 12000) this.finalize();
     void this.pump();
   }
   private finalize() {
