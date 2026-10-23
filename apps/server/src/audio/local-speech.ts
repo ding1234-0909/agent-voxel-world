@@ -211,8 +211,8 @@ export class LocalSpeech {
       );
     if (!audio.length || audio.length > MAX_AUDIO_BYTES)
       throw new SpeechError('音频不能为空且不能超过 5 MiB。', 413);
-    if (!['zh', 'en'].includes(language))
-      throw new SpeechError('只支持中文或英文识别。');
+    if (!['zh', 'en', 'auto'].includes(language))
+      throw new SpeechError('只支持中文、英文或自动识别。');
     if (this.busy)
       throw new SpeechError('服务器正在识别另一段录音，请稍后重试。', 429);
     this.busy = true;
