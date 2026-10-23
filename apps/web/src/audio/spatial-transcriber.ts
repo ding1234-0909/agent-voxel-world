@@ -28,7 +28,7 @@ export class SpatialTranscriber {
     this.stop();
     this.report({ text: '', partial: '', error: '' });
     await this.live.start(
-      'zh-CN',
+      'auto',
       {
         onState: (_state, status) => this.report({ status }),
         onStatus: (status) => this.report({ status }),
