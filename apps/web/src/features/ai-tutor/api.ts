@@ -47,9 +47,53 @@ export const OFFLINE_TUTOR_PHRASES: Array<{ en: string; zh: string }> = [
   { en: "Remember to say 'please' and 'thank you'. You are very polite!", zh: "记得说 please 和 thank you。你真有礼貌！" },
 ];
 
-/** 根据历史轮换选择一条兜底短句（避免一直重复同一句）。 */
-export function pickOfflineReply(historyLength: number): TutorReply {
-  const idx = historyLength % OFFLINE_TUTOR_PHRASES.length;
+/**
+ * 智能离线兜底：先按用户说的话匹配相关回应（接着话题聊），
+ * 匹配不到时从用户的话里挑一个词"引用式"回应，让对话像真人聊天，
+ * 实在没识别到内容才轮换预设短句。
+ */
+export function pickOfflineReply(userText: string, history: ChatMessage[]): TutorReply {
+  const t = (userText || '').toLowerCase().replace(/[，。！？、,.!?'"（）()]/g, ' ');
+
+  // 关键词规则：按用户问的内容回答（中英文都支持）
+  const rules: Array<{ test: RegExp; en: string; zh: string }> = [
+    { test: /(hi|hello|hey|good morning|good afternoon|你好|嗨|早上好)/, en: "Hello! Great to see you in our block world. What shall we do today?", zh: "你好！很高兴在方块世界见到你。我们今天做点什么？" },
+    { test: /(how are you|how's it going|what's up|how r u|how are u|你好吗|最近怎么样)/, en: "I'm doing great, thanks for asking! I just finished building a bridge. How about you?", zh: "我很好，谢谢关心！我刚建好一座桥。你呢？" },
+    { test: /(your name|who are you|你叫什么|你是谁)/, en: "My name is Builder, and this is the AI primary school. Nice to meet you!", zh: "我叫 Builder，这里是 AI 小学。很高兴认识你！" },
+    { test: /(\d+|\b(one|two|three|four|five|six|seven|eight|nine|ten)\b).*(year|years|old|岁)/, en: "Wow, that's a wonderful age to learn English! You'll get better every single day.", zh: "哇，这个年纪学英语刚刚好！你会一天比一天厉害的。" },
+    { test: /(like|love|enjoy|favorite|favourite|喜欢|最爱).*(color|colour|red|blue|green|yellow|black|white|颜色)/, en: "Colors are so much fun! Red and blue are my favorites. What's your favorite color?", zh: "颜色真有趣！红色和蓝色是我的最爱。你最喜欢的颜色是什么？" },
+    { test: /(like|love|enjoy|favorite|favourite|喜欢|最爱).*(animal|cat|dog|rabbit|panda|sheep|horse|动物|猫|狗|兔子)/, en: "Animals are my best friends! I think cats and dogs are wonderful. Which animal do you like best?", zh: "动物是我最好的朋友！我觉得小猫小狗都很棒。你最喜欢哪种动物？" },
+    { test: /(build|building|house|castle|block|mine|建|盖|房子|城堡|方块)/, en: "Building is the best part of this world! Let's make a castle together. What blocks do you want to use?", zh: "建造是这个世界上最好玩的事！我们一起盖城堡吧。你想用什么方块？" },
+    { test: /(school|study|learn|english|homework|teacher|学校|学习|英语|作业|老师)/, en: "This is the AI primary school, and learning English here is really fun! What did you learn at school today?", zh: "这里是 AI 小学，在这里学英语超好玩！你今天在学校学了什么？" },
+    { test: /(eat|lunch|breakfast|dinner|food|apple|bread|milk|rice|hungry|吃|午饭|早饭|面包|牛奶|苹果|饿)/, en: "Yummy! Food always makes me happy. I love bread and milk. What food do you like?", zh: "好吃！美食总能让我开心。我喜欢面包和牛奶。你喜欢什么吃的？" },
+    { test: /(play|game|jump|run|swim|ball|hide|seek|玩|游戏|跳|跑|游泳|球|捉迷藏)/, en: "Playing is the best! Let's play a game together. Can you jump three times?", zh: "玩是最棒的事！我们一起玩游戏吧。你能跳三下吗？" },
+    { test: /(thank|thanks|great|good|awesome|nice|谢谢|太棒|真好)/, en: "You are very polite! Saying thank you makes the world warmer. Keep it up!", zh: "你真有礼貌！说谢谢让世界更温暖。继续保持！" },
+    { test: /(yes|yeah|ok|okay|no|好|嗯|不)/, en: "Got it! You're doing great. Let's try one more sentence in English, okay?", zh: "明白啦！你做得很好。我们再用英语试一句好不好？" },
+    { test: /(sing|song|music|dance|唱歌|音乐|跳舞)/, en: "I love music! Singing helps you learn English faster. Can you sing your favorite song for me?", zh: "我喜欢音乐！唱歌能让你更快学会英语。你能给我唱一首你最喜欢的歌吗？" },
+    { test: /(story|book|read|故事|书|读)/, en: "Stories are full of magic! Can you tell me a short story in English? I love listening.", zh: "故事充满魔力！你能用英语给我讲一个小故事吗？我最爱听啦。" },
+    { test: /(weather|sunny|rain|snow|cloud|天|晴|雨|雪|云)/, en: "Look at the sky! Do you like sunny days or rainy days? I like sunny days best.", zh: "看天空！你喜欢晴天还是雨天？我最喜欢晴天。" },
+    { test: /(friend|friends|一起|朋友)/, en: "Friends make everything fun! In this world, you, me and the robots are good friends. Let's build together!", zh: "有朋友才好玩！在这个世界里，你、我和机器人们都是好朋友。我们一起建吧！" },
+    { test: /(boring|tired|sad|不开心|无聊|累)/, en: "Don't worry! When you feel tired, let's take a break and build something fun together, okay?", zh: "别担心！累的时候我们就休息一下，一起建点好玩的东西，好吗？" },
+  ];
+
+  for (const r of rules) {
+    if (r.test.test(t)) {
+      const { en, zh } = r;
+      return { en, zh, raw: `${en}（${zh}）` };
+    }
+  }
+
+  // 引用式回应：从用户的话里挑最后一个英文单词，接着它聊，显得"听懂"了
+  const words = (userText || '').match(/[a-zA-Z][a-zA-Z']{1,}/g) || [];
+  const lastWord = words.length > 0 ? words[words.length - 1] : null;
+  if (lastWord && lastWord.length >= 3) {
+    const en = `You said "${lastWord}" — that's interesting! Can you use it in a full sentence, like "I like ${lastWord}"?`;
+    const zh = `你说了 ${lastWord}——真有意思！你能用它造个完整的句子吗？比如"我喜欢 ${lastWord}"。`;
+    return { en, zh, raw: `${en}（${zh}）` };
+  }
+
+  // 完全没识别到内容：轮换预设短句，避免一直重复
+  const idx = (history.length || 0) % OFFLINE_TUTOR_PHRASES.length;
   const { en, zh } = OFFLINE_TUTOR_PHRASES[idx];
   return { en, zh, raw: `${en}（${zh}）` };
 }
@@ -76,8 +120,9 @@ export async function sendTutorChat(
   timeoutMs = DEFAULT_TIMEOUT_MS,
 ): Promise<TutorReply> {
   if (!config.baseURL.trim() || !config.apiKey.trim() || !config.model.trim()) {
-    // 未配置 AI 接口时，使用离线陪练兜底（不联网也能练口语）
-    return pickOfflineReply(history.length);
+    // 未配置 AI 接口时，使用智能离线陪练兜底（听懂你的话再回应）
+    const lastUser = [...history].reverse().find((m) => m.role === 'user')?.content || '';
+    return pickOfflineReply(lastUser, history);
   }
 
   const controller = new AbortController();
@@ -124,8 +169,9 @@ export async function sendTutorChat(
     return { en, zh, raw: raw.trim() };
   } catch (error) {
     if (error instanceof TutorError) throw error;
-    // 网络错误 / 超时 / CORS 拦截 / 未联网：切换到离线陪练兜底，伙伴照常说话
-    return pickOfflineReply(history.length);
+    // 网络错误 / 超时 / CORS 拦截 / 未联网：切换到智能离线兜底，伙伴照常说话
+    const lastUser = [...history].reverse().find((m) => m.role === 'user')?.content || '';
+    return pickOfflineReply(lastUser, history);
   } finally {
     clearTimeout(timer);
   }
