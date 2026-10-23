@@ -127,15 +127,21 @@ export function EnglishTutor() {
   const send = async () => {
     const text = input.trim();
     if (!text || loading) return;
-    if (!config.baseURL.trim() || !config.apiKey.trim() || !config.model.trim()) {
-      setError('未完成配置：请先点击右上角 ⚙ 设置，填写接口地址、API Key 和模型名。');
-      setSettingsOpen(true);
-      return;
-    }
+    const hasAiConfig = !!(
+      config.baseURL.trim() &&
+      config.apiKey.trim() &&
+      config.model.trim()
+    );
 
     setInput('');
     setError('');
     setNotice('');
+    if (!hasAiConfig) {
+      setNotice(
+        '未配置 AI 接口，正在使用离线陪练模式（不联网也能练口语）。想更聪明可在设置里填接口地址与 Key。',
+      );
+      setSettingsOpen(false);
+    }
     const next: ChatMessage[] = [...messages, { role: 'user', content: text }];
     setMessages(next);
     saveHistory(next);
