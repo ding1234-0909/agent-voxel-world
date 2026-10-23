@@ -79,7 +79,10 @@ export function installSpeechRoutes(app: Express, speech = new LocalSpeech(), as
         if (!res.writableEnded) controller.abort();
       };
       res.on('close', cancel);
-      const language = String(req.query.language ?? 'zh') === 'en' ? 'en' : 'zh';
+      let language = String(req.query.language ?? 'zh');
+      if (language !== 'en' && language !== 'auto') {
+        language = 'zh';
+      }
       try {
         if (req.query.engine === 'bailian') {
           const bailian = await asr.get();
