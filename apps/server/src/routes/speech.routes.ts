@@ -12,20 +12,23 @@ import { AsrSettingsStore, maskBailianSettings } from '../audio/asr-settings';
 export function installSpeechRoutes(app: Express, speech = new LocalSpeech(), asr = new AsrSettingsStore()) {
   const origin = process.env.WEB_ORIGIN ?? 'http://127.0.0.1:5173';
   app.use('/voice', (req, res, next) => {
-    if (
-      (req.headers.origin && req.headers.origin !== origin) ||
-      req.headers['sec-fetch-site'] === 'cross-site'
-    ) {
-      res.status(403).json({ error: '不允许此页面访问服务器语音服务。' });
-      return;
+    // 本地游戏服务：允许任意来源访问（服务器只监听 127.0.0.1）。
+    const reqOrigin = req.headers.origin;
+    if (reqOrigin) {
+      res.header('Access-Control-Allow-Origin', reqOrigin);
+      res.header('Vary', 'Origin');
     }
-    res.header('Cache-Control', 'no-store');
-    if (req.method === 'OPTIONS') {
+    if (
+      req.method === 'OPTIONS' &&
+      reqOrigin &&
+      req.headers['access-control-request-method']
+    ) {
       res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
       res.header('Access-Control-Allow-Headers', 'Content-Type');
       res.status(204).end();
       return;
     }
+    res.header('Cache-Control', 'no-store');
     next();
   });
   app.get('/voice/capabilities', async (_req, res) => {
