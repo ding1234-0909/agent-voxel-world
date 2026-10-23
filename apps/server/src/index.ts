@@ -73,7 +73,7 @@ installAgentRoutes(app, agents);
 installAiChatRoutes(app, providers);
 installTtsRoutes(app, voiceServices);
 server.onBeforeShutdown(() => agents.close());
-await server.listen(port, '127.0.0.1');
+await server.listen(port, '0.0.0.0');
 const world = await matchMaker.createRoom('world', {});
 app.get('/world', (_req, res) => res.json({ roomId: world.roomId }));
 await agents.load();
