@@ -82,7 +82,7 @@ export function installSpeechRoutes(app: Express, speech = new LocalSpeech(), as
         if (!res.writableEnded) controller.abort();
       };
       res.on('close', cancel);
-      let language = String(req.query.language ?? 'zh');
+      let language = String(req.query.language ?? 'auto');
       if (language !== 'en' && language !== 'auto') {
         language = 'zh';
       }
